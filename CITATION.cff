@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+message: "If you use this methodology, please cite it as below."
+authors:
+  - family-names: "Graham"
+    given-names: "J. Scott"
+    alias: "cheddarfox"
+    email: "scott@cheddarfox.com"
+  - name: "ByBren, LLC"
+title: "SAW — SAFe Agentic Workflow"
+version: 2.10.0
+date-released: 2026-03-19
+url: "https://github.com/bybren-llc/safe-agentic-workflow"
+keywords:
+  - multi-agent
+  - SAFe
+  - AI-assisted development
+  - Claude Code
+  - software engineering
+  - agile methodology
+  - task orchestration
+  - evidence-based development
+license: MIT
+repository-code: "https://github.com/bybren-llc/safe-agentic-workflow"
+type: software
+abstract: >-
+  A production-tested Claude Code harness for teams that want structured AI
+  workflows. Built on SAFe methodology, adapted for multi-agent teams. Based
+  on 5 months of production experience (169 issues, 9 cycles, 2,193 commits).
+  Includes 18 model-invoked skills, 24 slash commands, 11 SAFe agent profiles,
+  and a three-layer architecture implementing patterns from Anthropic's
+  engineering research.
