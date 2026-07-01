@@ -26,7 +26,7 @@ class Agent:
         session_id: str | None = None,
     ) -> None:
         self.config = config
-        self.provider = provider or build_provider(config)
+        self.provider = provider
         self.tools = ToolRegistry(config)
         self.sessions = SessionStore(config.sessions_dir)
         self.session_id = session_id or self.sessions.new_id()
@@ -67,7 +67,7 @@ class Agent:
         self.messages.append(Message(role="user", content=text))
         final_text = ""
         for _ in range(12):
-            response = self.provider.complete(self.messages, tool_specs())
+            response = self._provider().complete(self.messages, tool_specs())
             if response.text:
                 final_text = response.text
                 if print_output:
@@ -93,6 +93,11 @@ class Agent:
         error("Tool loop limit reached.")
         self.sessions.save(self.session_id, self.messages)
         return final_text
+
+    def _provider(self) -> ModelProvider:
+        if self.provider is None:
+            self.provider = build_provider(self.config)
+        return self.provider
 
     def _system_prompt(self, user_text: str) -> str:
         parts = [BASE_SYSTEM_PROMPT, role_prompt()]

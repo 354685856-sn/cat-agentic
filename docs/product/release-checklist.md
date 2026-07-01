@@ -2,7 +2,7 @@
 
 Last updated: 2026-06-30
 
-## v0.1 release target
+## v0.2 release target
 
 - Package: `x-agentic-workflow`
 - CLI commands:
@@ -13,6 +13,9 @@ Last updated: 2026-06-30
   - `xaw sessions`
   - `xaw smoke-openai-compatible`
 - Install target: `pipx install x-agentic-workflow`
+- UI target: `xaw tui` multi-panel hybrid terminal app with workspace status,
+  sessions, extension status, tool registry, approval status, transcript,
+  composer, and shortcut help.
 
 ## Required checks
 

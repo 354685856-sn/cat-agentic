@@ -35,3 +35,18 @@ def test_agent_resolves_tool_call_and_returns_final_text(tmp_path: Path) -> None
 
     assert result == "done"
     assert (tmp_path / "x.txt").read_text(encoding="utf-8") == "ok"
+
+
+def test_agent_can_initialize_without_api_key(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    config = RuntimeConfig(
+        workdir=tmp_path,
+        sessions_dir=tmp_path / ".sessions",
+        skills_dir=tmp_path / ".skills",
+        hooks_dir=tmp_path / ".hooks",
+        mcp_config_file=tmp_path / ".mcp.json",
+    )
+
+    agent = Agent(config, session_id="no-key")
+
+    assert agent.session_id == "no-key"

@@ -15,7 +15,7 @@ and Claude-style coding assistants, while using original Python code.
 - Hybrid terminal UI:
   - `xaw chat` interactive shell UI
   - `xaw run -p "..."` headless one-shot mode
-  - `xaw tui` Textual full-screen terminal UI
+  - `xaw tui` Textual full-screen hybrid terminal UI
 - BYOK model providers:
   - Anthropic Messages API
   - OpenAI-compatible Chat Completions API
@@ -91,6 +91,14 @@ xaw tui
 xaw run -p "list this project and explain what it does"
 ```
 
+`xaw tui` opens a multi-panel terminal app:
+
+- left rail: workspace, provider, model, sessions, Skills, Hooks, MCP status
+- center: transcript and prompt composer
+- right rail: tool registry, approval status, keyboard shortcuts
+- shortcuts: `Ctrl+S` submit, `Ctrl+R` reset, `Ctrl+D` doctor, `Ctrl+A`
+  approval view, `Ctrl+L` clear, `Ctrl+Q` quit
+
 Resume a session:
 
 ```bash
@@ -126,7 +134,11 @@ xaw smoke-openai-compatible --allow-skip
 
 ## Release status
 
-Version `0.1.0` is published to TestPyPI for install verification:
+Version `0.1.0` is published to PyPI:
+
+<https://pypi.org/project/x-agentic-workflow/0.1.0/>
+
+Version `0.1.0` is also published to TestPyPI for install verification:
 
 <https://test.pypi.org/project/x-agentic-workflow/0.1.0/>
 
