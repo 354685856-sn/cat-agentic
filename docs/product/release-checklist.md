@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-01
 
-## v0.5 release target
+## v0.5.1 release target
 
 - Package: `x-agentic-workflow`
 - CLI commands:
@@ -44,6 +44,7 @@ plutil -lint "apps/macos/X Agentic Workflow.app/Contents/Info.plist"
 test -x "apps/macos/X Agentic Workflow.app/Contents/MacOS/x-agentic-workflow"
 ./scripts/build-macos-preview-dmg.sh
 ./scripts/smoke-macos-preview-dmg.sh
+./scripts/check-macos-signing.sh "apps/macos/X Agentic Workflow.app"
 ```
 
 Before public customer distribution, additionally verify:

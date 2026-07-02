@@ -17,6 +17,7 @@ dist/X-Agentic-Workflow-<version>-macos-preview.dmg
 The DMG contains:
 
 - `X Agentic Workflow.app`
+- `Applications` shortcut
 - `README-macOS-preview.md`
 
 The app bundle includes a source snapshot under:
@@ -77,6 +78,27 @@ Or pass an explicit DMG path:
 
 The smoke test mounts the DMG, verifies the app bundle, opens the app, waits for
 the local desktop URL, checks `/api/state`, and detaches the DMG.
+
+## Signing check
+
+For a preview build:
+
+```bash
+./scripts/check-macos-signing.sh "apps/macos/X Agentic Workflow.app"
+```
+
+For a mounted or copied customer app:
+
+```bash
+./scripts/check-macos-signing.sh "/Applications/X Agentic Workflow.app"
+```
+
+Production customer builds should show:
+
+- `Developer ID Application` authority
+- hardened runtime
+- `Notarization Ticket=stapled`
+- `spctl` accepted with `Notarized Developer ID`
 
 ## Requirements
 

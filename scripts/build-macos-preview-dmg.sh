@@ -30,6 +30,7 @@ rsync -a \
 
 cp "$ROOT/docs/product/macos-app.md" "$DMG_DIR/README-macOS-preview.md"
 ditto "$DIST_APP" "$DMG_DIR/${APP_NAME}.app"
+ln -s /Applications "$DMG_DIR/Applications"
 
 rm -f "$DMG_PATH"
 hdiutil create \
