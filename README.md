@@ -187,7 +187,11 @@ xaw smoke-openai-compatible --allow-skip
 
 ## Release status
 
-Current local release target: `0.11.1`, focused on desktop UI alignment.
+Current local release target: `0.12.0`, focused on desktop session recovery and filtering.
+
+Version `0.11.1` is published on GitHub with desktop UI alignment:
+
+<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.11.1>
 
 Version `0.11.0` is published on GitHub with persisted desktop File Ledger:
 

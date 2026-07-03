@@ -84,10 +84,13 @@ class DesktopApp:
         self.project_validation: dict[str, Any] | None = None
         self.file_changes: list[dict[str, Any]] = []
         self.selected_diff_index: int | None = None
+        self.session_restored = False
 
     def state(self) -> dict[str, Any]:
         visible_changes = self._visible_file_changes()
         selected_diff = self._selected_diff()
+        session_details = list(reversed(self.sessions.list_session_summaries()[-12:]))
+        session_title = self._session_title()
         return {
             "provider": self.config.provider.name,
             "model": self.config.provider.model,
@@ -97,6 +100,9 @@ class DesktopApp:
             "workdir": str(self.config.workdir),
             "sessionId": self.agent.session_id,
             "sessions": list(reversed(self.sessions.list_sessions()[-8:])),
+            "sessionDetails": session_details,
+            "sessionTitle": session_title,
+            "sessionRestored": self.session_restored,
             "sessionsDir": str(self.config.sessions_dir),
             "messages": self.messages[-30:],
             "projectValidation": self.project_validation,
@@ -112,12 +118,14 @@ class DesktopApp:
         self.messages = []
         self.file_changes = []
         self.selected_diff_index = None
+        self.session_restored = False
         return self.state()
 
     def open_session(self, session_id: str) -> dict[str, Any]:
         self.agent = self._new_agent(session_id=session_id)
         self.file_changes = self._load_file_changes(session_id)
         self.selected_diff_index = len(self.file_changes) - 1 if self.file_changes else None
+        self.session_restored = True
         self.messages = [
             {"role": message.role, "content": message.content}
             for message in self.agent.messages
@@ -279,6 +287,7 @@ class DesktopApp:
         self.messages = []
         self.file_changes = []
         self.selected_diff_index = None
+        self.session_restored = False
         self.project_validation = _validate_project(target)
         return {
             **self.state(),
@@ -369,6 +378,11 @@ class DesktopApp:
             index = len(self.file_changes) - 1
             self.selected_diff_index = index
         return {**self.file_changes[index], "index": index}
+
+    def _session_title(self) -> str:
+        if not self.session_restored:
+            return "新建会话"
+        return str(self.sessions.session_summary(self.agent.session_id)["title"])
 
 
 def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
@@ -995,6 +1009,17 @@ def render_desktop_html() -> str:
     .send { min-width: 116px; height: 44px; border-radius: 14px; background: #d8b8ad; border-color: #d8b8ad; }
     .project-picker { border-top: 1px solid #e7ebf1; padding: 14px 22px; background: #fff; }
     .messages { width: min(900px, 100%); max-height: 180px; text-align: left; }
+    .session-search {
+      width: calc(100% - 32px); height: 40px; margin: 0 16px 10px 32px;
+      border: 1px solid #dbe3ee; border-radius: 12px; background: #fff; padding: 0 12px;
+      color: #202633; font: inherit; font-size: 14px;
+    }
+    .session-meta { color: #8a94a3; font-size: 12px; white-space: nowrap; }
+    .restore-pill {
+      display: none; margin-top: 14px; border: 1px solid #dbe3ee; border-radius: 999px;
+      padding: 6px 12px; color: #667085; background: #fbfcfe; font-size: 13px;
+    }
+    .restore-pill.active { display: inline-flex; }
     .inspector { display: none; }
     .settings-layout { grid-template-columns: 250px 1fr; min-height: calc(100vh - 64px); }
     .settings-nav { background: #fff; border-right: 1px solid #e7ebf1; padding: 18px 0; }
@@ -1050,6 +1075,7 @@ def render_desktop_html() -> str:
             <div id="recentProjects"><div class="conversation-row muted"><span class="conversation-title">暂无最近项目</span></div></div>
           </div>
           <div class="side-heading">对话</div>
+          <input class="session-search" id="sessionSearch" placeholder="搜索会话" />
           <div id="recents"><div class="conversation-row muted"><span class="conversation-title">暂无聊天</span></div></div>
         </div>
       </div>
@@ -1074,8 +1100,9 @@ def render_desktop_html() -> str:
           <div class="hero">
             <div class="hero-main">
               <div class="hero-logo">X</div>
-              <h1 class="greeting">新建会话</h1>
-              <div class="subline">开始一个新的编码会话。XAW 已准备好帮你构建、调试和整理项目。</div>
+              <h1 class="greeting" id="sessionTitle">新建会话</h1>
+              <div class="subline" id="sessionSubtitle">开始一个新的编码会话。XAW 已准备好帮你构建、调试和整理项目。</div>
+              <div class="restore-pill" id="restorePill">已恢复会话</div>
               <div class="messages" id="messages"></div>
             </div>
             <div class="composer-dock">
@@ -1213,6 +1240,12 @@ def render_desktop_html() -> str:
       $('currentProjectPath').textContent = projectPath;
       $('projectPathInput').value = state.workdir;
       $('chatTab').textContent = projectName;
+      $('sessionTitle').textContent = state.sessionTitle || '新建会话';
+      $('sessionSubtitle').textContent = state.sessionRestored
+        ? `已恢复 ${state.sessionId}。你可以继续这段会话，文件变更和 diff 会保留。`
+        : '开始一个新的编码会话。XAW 已准备好帮你构建、调试和整理项目。';
+      $('restorePill').classList.toggle('active', !!state.sessionRestored);
+      $('restorePill').textContent = state.sessionRestored ? `已恢复 · ${state.sessionId}` : '';
       $('model').textContent = state.model;
       $('providerName').value = state.provider;
       $('providerModel').value = state.model;
@@ -1226,7 +1259,7 @@ def render_desktop_html() -> str:
       }
       renderRecentProjects(state.recentProjects || []);
       renderFileChanges(state.fileChanges || [], state.selectedDiff || state.latestDiff, state.selectedDiffIndex);
-      $('recents').innerHTML = state.sessions.map((s, i) => `<div class="conversation-row" data-session="${s}"><span class="conversation-title">${s}</span><span class="shortcut">⌘${i + 1}</span></div>`).join('') || '<div class="conversation-row muted"><span class="conversation-title">暂无聊天</span></div>';
+      renderSessions(state.sessionDetails || []);
       $('messages').innerHTML = state.messages.map(m => `<div class="msg ${m.role}">${escapeHtml(m.content)}</div>`).join('');
       document.querySelectorAll('[data-session]').forEach(btn => btn.onclick = async () => render(await api('/api/open', {sessionId: btn.dataset.session})));
       document.querySelectorAll('[data-project-path]').forEach(btn => btn.onclick = async () => switchProject(btn.dataset.projectPath));
@@ -1268,6 +1301,28 @@ def render_desktop_html() -> str:
         const badge = project.active ? '当前' : `⌘${i + 1}`;
         return `<div class="conversation-row${active}"><button data-project-path="${escapeHtml(project.path)}" title="${escapeHtml(project.path)}">${escapeHtml(project.name)}</button><span class="shortcut">${badge}</span></div>`;
       }).join('');
+    }
+    function renderSessions(sessions) {
+      const query = ($('sessionSearch').value || '').trim().toLowerCase();
+      const visible = sessions.filter(session => {
+        const haystack = `${session.title || ''} ${session.id || ''}`.toLowerCase();
+        return !query || haystack.includes(query);
+      });
+      $('recents').innerHTML = visible.map((session, i) => {
+        const meta = session.fileChangeCount ? `${session.fileChangeCount} 文件` : relativeTime(session.updatedAt);
+        return `<div class="conversation-row" data-session="${escapeHtml(session.id)}"><span class="conversation-title" title="${escapeHtml(session.id)}">${escapeHtml(session.title)}</span><span class="session-meta">${escapeHtml(meta || `⌘${i + 1}`)}</span></div>`;
+      }).join('') || '<div class="conversation-row muted"><span class="conversation-title">暂无匹配会话</span></div>';
+    }
+    function relativeTime(value) {
+      if (!value) return '';
+      const time = Date.parse(value);
+      if (!Number.isFinite(time)) return '';
+      const minutes = Math.max(0, Math.round((Date.now() - time) / 60000));
+      if (minutes < 1) return '刚刚';
+      if (minutes < 60) return `${minutes}分钟前`;
+      const hours = Math.round(minutes / 60);
+      if (hours < 24) return `${hours}小时前`;
+      return `${Math.round(hours / 24)}天前`;
     }
     function renderFileChanges(changes, latest, selectedIndex) {
       const box = $('fileChanges');
@@ -1314,6 +1369,7 @@ def render_desktop_html() -> str:
     $('settingsBtn').onclick = () => { setNavActive('navSettings'); showScreen('settings'); };
     $('settingsTab').onclick = () => { setNavActive('navSettings'); showScreen('settings'); };
     $('chatTab').onclick = () => { setNavActive('newChat'); showScreen('chat'); };
+    $('sessionSearch').addEventListener('input', async () => render(await api('/api/state')));
     $('inspectorToggle').onclick = () => {
       const app = document.querySelector('.app');
       const collapsed = app.classList.toggle('inspector-collapsed');

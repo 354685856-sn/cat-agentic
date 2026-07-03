@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-03
 
-## v0.11.1 release target
+## v0.12.0 release target
 
 - Package: `x-agentic-workflow`
 - CLI commands:
@@ -41,6 +41,9 @@ Last updated: 2026-07-03
 - Desktop UI Alignment target: desktop home screen uses a focused empty-session
   layout, settings uses the provider-management layout, and unimplemented
   sidebar/settings entries are not shown as fake navigation.
+- Desktop Session Recovery target: desktop shows restorable session summaries,
+  can filter local sessions by title/id, and clearly indicates when a session
+  has been restored.
 - Distribution target: `scripts/build-macos-preview-dmg.sh` builds a preview
   DMG with a bundled clean-room source snapshot for customer testing.
 
@@ -180,3 +183,10 @@ copying implementation details.
 - [x] Align home to a focused empty-session screen with bottom composer.
 - [x] Align settings to current provider-management capability.
 - [x] Remove unimplemented fake navigation entries from sidebar and settings.
+
+### v0.12 Session recovery and filtering
+
+- [x] Derive desktop session titles from the first user message.
+- [x] Expose session summaries with updated time, message count, and file-change count.
+- [x] Render searchable local session list in the sidebar.
+- [x] Show restored-session title and visible restore pill after opening a session.

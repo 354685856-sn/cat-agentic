@@ -67,5 +67,38 @@ class SessionStore:
         }
         path.write_text(json.dumps(payload, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
+    def session_summary(self, session_id: str) -> dict[str, Any]:
+        payload = self.load_payload(session_id)
+        messages = payload.get("messages", [])
+        title = session_id
+        if isinstance(messages, list):
+            for message in messages:
+                if not isinstance(message, dict):
+                    continue
+                if message.get("role") != "user":
+                    continue
+                content = str(message.get("content", "")).strip()
+                if content:
+                    title = _compact_title(content)
+                    break
+        file_changes = payload.get("file_changes", [])
+        return {
+            "id": session_id,
+            "title": title,
+            "updatedAt": str(payload.get("updated_at", "")),
+            "messageCount": len(messages) if isinstance(messages, list) else 0,
+            "fileChangeCount": len(file_changes) if isinstance(file_changes, list) else 0,
+        }
+
+    def list_session_summaries(self) -> list[dict[str, Any]]:
+        return [self.session_summary(session_id) for session_id in self.list_sessions()]
+
     def list_sessions(self) -> list[str]:
         return sorted(p.stem for p in self.root.glob("*.json"))
+
+
+def _compact_title(text: str, limit: int = 42) -> str:
+    single_line = " ".join(text.split())
+    if len(single_line) <= limit:
+        return single_line
+    return f"{single_line[: limit - 1]}…"

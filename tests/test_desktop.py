@@ -56,6 +56,11 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "/api/project/switch" in html
     assert "projectPathInput" in html
     assert "recentProjects" in html
+    assert "sessionSearch" in html
+    assert "sessionDetails" in html
+    assert "sessionTitle" in html
+    assert "已恢复会话" in html
+    assert "renderSessions" in html
     assert "button.disabled = true" in html
     assert "button.disabled = false" in html
     assert "/api/project/validate" in html
@@ -139,6 +144,41 @@ def test_desktop_restores_file_ledger_when_opening_session(tmp_path: Path) -> No
     assert state["selectedDiffIndex"] == 1
     assert state["selectedDiff"]["path"] == "two.txt"
     assert state["messages"] == [{"role": "user", "content": "hello"}]
+    assert state["sessionRestored"] is True
+    assert state["sessionTitle"] == "hello"
+
+
+def test_desktop_session_details_include_titles_and_counts(tmp_path: Path) -> None:
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+    app.sessions.save(
+        "session-one",
+        [
+            Message(role="system", content="system"),
+            Message(role="user", content="please fix the desktop session recovery"),
+            Message(role="assistant", content="done"),
+        ],
+    )
+    app.sessions.save_file_changes(
+        "session-one",
+        [{"path": "README.md", "ok": True, "existed": True, "summary": "", "diff": ""}],
+    )
+
+    state = app.state()
+    detail = next(item for item in state["sessionDetails"] if item["id"] == "session-one")
+
+    assert detail["title"] == "please fix the desktop session recovery"
+    assert detail["messageCount"] == 3
+    assert detail["fileChangeCount"] == 1
+    assert state["sessionRestored"] is False
+    assert state["sessionTitle"] == "新建会话"
 
 
 def test_desktop_selects_prior_diff(tmp_path: Path) -> None:
