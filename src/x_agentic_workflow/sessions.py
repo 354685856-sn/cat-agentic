@@ -23,7 +23,7 @@ class SessionStore:
         return self.root / f"{safe}.json"
 
     def new_id(self) -> str:
-        return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
 
     def load(self, session_id: str) -> list[Message]:
         data = self.load_payload(session_id)

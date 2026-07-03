@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-03
 
-## v0.14.0 release target
+## v0.15.0 release target
 
 - Package: `x-agentic-workflow`
 - CLI commands:
@@ -50,6 +50,9 @@ Last updated: 2026-07-03
 - Provider Status UX target: settings reflects the actually saved provider,
   preserves unsaved form drafts across UI state refreshes, and blocks duplicate
   save/test submissions.
+- Composer Draft Recovery target: desktop persists bounded text drafts by
+  project and session, restores after browser refresh, and clears after a
+  successful send without persisting attachment bodies.
 - Distribution target: `scripts/build-macos-preview-dmg.sh` builds a preview
   DMG with a bundled clean-room source snapshot for customer testing.
 
@@ -214,3 +217,13 @@ copying implementation details.
 - [x] Disable save/test buttons while a provider request is active.
 - [x] Guard duplicate save/test submissions.
 - [x] Remove fake add-provider button and hardcoded provider sample cards.
+
+### v0.15 Composer draft recovery
+
+- [x] Persist text drafts by resolved project workdir and session id.
+- [x] Restore drafts after browser refresh and session return.
+- [x] Keep new-session drafts isolated from the previous session.
+- [x] Clear persisted draft after successful send.
+- [x] Bound drafts to 64 KiB and tolerate unavailable local storage.
+- [x] Keep attachment contents out of draft persistence.
+- [x] Use microsecond session ids to prevent rapid new-session collisions.

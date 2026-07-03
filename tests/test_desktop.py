@@ -82,6 +82,15 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "providerSubmitting" in html
     assert "runProviderAction" in html
     assert "添加服务商" not in html
+    assert "DRAFT_KEY_PREFIX" in html
+    assert "draftKeyForState" in html
+    assert "restoreDraftForState" in html
+    assert "saveCurrentDraft" in html
+    assert "clearCurrentDraft" in html
+    assert "MAX_DRAFT_CHARS" in html
+    assert "localStorage.setItem(currentDraftKey, draft)" in html
+    assert "localStorage.removeItem(currentDraftKey)" in html
+    assert "JSON.stringify(pendingAttachments)" not in html
     assert "Token 用量" not in html
 
 
@@ -313,10 +322,14 @@ def test_desktop_clears_file_ledger_on_new_chat_and_project_switch(tmp_path: Pat
         mcp_config_file=tmp_path / "mcp.json",
     )
     app = DesktopApp(config)
+    first_session_id = app.agent.session_id
     change = {"path": "one.txt", "ok": True, "existed": False, "summary": "", "diff": ""}
     app.file_changes.append(change)
 
-    assert app.new_chat()["fileChanges"] == []
+    new_state = app.new_chat()
+
+    assert new_state["fileChanges"] == []
+    assert new_state["sessionId"] != first_session_id
     app.file_changes.append({**change, "path": "two.txt"})
     switched = app.switch_project({"path": str(target)})
 

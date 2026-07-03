@@ -1317,10 +1317,13 @@ def render_desktop_html() -> str:
     const MAX_ATTACHMENT_FILES = 5;
     const MAX_ATTACHMENT_BYTES = 128 * 1024;
     const MAX_ATTACHMENT_TOTAL_BYTES = 256 * 1024;
+    const MAX_DRAFT_CHARS = 64 * 1024;
+    const DRAFT_KEY_PREFIX = 'xaw:composer-draft:v1:';
     let pendingAttachments = [];
     let attachmentEpoch = 0;
     let providerFormDirty = false;
     let providerSubmitting = false;
+    let currentDraftKey = '';
     async function api(path, body) {
       const res = await fetch(path, { method: body ? 'POST' : 'GET', headers: {'content-type': 'application/json'}, body: body ? JSON.stringify(body) : undefined });
       return await res.json();
@@ -1335,6 +1338,7 @@ def render_desktop_html() -> str:
       $('currentProjectPath').textContent = projectPath;
       $('projectPathInput').value = state.workdir;
       $('chatTab').textContent = projectName;
+      restoreDraftForState(state);
       $('sessionTitle').textContent = state.sessionTitle || '新建会话';
       $('sessionSubtitle').textContent = state.sessionRestored
         ? `已恢复 ${state.sessionId}。你可以继续这段会话，文件变更和 diff 会保留。`
@@ -1355,6 +1359,7 @@ def render_desktop_html() -> str:
       renderSessions(state.sessionDetails || []);
       $('messages').innerHTML = state.messages.map(m => `<div class="msg ${m.role}">${escapeHtml(m.content)}</div>`).join('');
       document.querySelectorAll('[data-session]').forEach(btn => btn.onclick = async () => {
+        saveCurrentDraft();
         resetAttachments();
         render(await api('/api/open', {sessionId: btn.dataset.session}));
       });
@@ -1368,6 +1373,39 @@ def render_desktop_html() -> str:
         baseUrl: $('providerBaseUrl').value,
         apiKeyEnv: $('providerKeyEnv').value
       };
+    }
+    function draftKeyForState(state) {
+      return `${DRAFT_KEY_PREFIX}${encodeURIComponent(state.workdir)}:${encodeURIComponent(state.sessionId)}`;
+    }
+    function restoreDraftForState(state) {
+      const nextKey = draftKeyForState(state);
+      if (nextKey === currentDraftKey) return;
+      currentDraftKey = nextKey;
+      try {
+        $('prompt').value = localStorage.getItem(currentDraftKey) || '';
+      } catch (_error) {
+        $('prompt').value = '';
+      }
+    }
+    function saveCurrentDraft() {
+      if (!currentDraftKey) return;
+      const draft = $('prompt').value.slice(0, MAX_DRAFT_CHARS);
+      try {
+        if (draft) localStorage.setItem(currentDraftKey, draft);
+        else localStorage.removeItem(currentDraftKey);
+      } catch (_error) {
+        return;
+      }
+    }
+    function clearCurrentDraft() {
+      if (currentDraftKey) {
+        try {
+          localStorage.removeItem(currentDraftKey);
+        } catch (_error) {
+          // The in-memory composer can still be cleared when storage is unavailable.
+        }
+      }
+      $('prompt').value = '';
     }
     function renderProviderState(state) {
       if (!providerFormDirty || (state.providerSave && state.providerSave.ok)) {
@@ -1566,7 +1604,7 @@ def render_desktop_html() -> str:
       const attachments = pendingAttachments.map(({name, content}) => ({name, content}));
       const state = await api('/api/ask', {prompt, attachments});
       if (!state.attachmentError) {
-        $('prompt').value = '';
+        clearCurrentDraft();
         resetAttachments();
       }
       render(state);
@@ -1574,8 +1612,10 @@ def render_desktop_html() -> str:
     $('send').onclick = send;
     $('attachButton').onclick = () => $('attachmentInput').click();
     $('attachmentInput').addEventListener('change', event => addAttachmentFiles(event.target.files));
+    $('prompt').addEventListener('input', saveCurrentDraft);
     $('prompt').addEventListener('keydown', e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) send(); });
     $('newChat').onclick = async () => {
+      saveCurrentDraft();
       resetAttachments();
       showScreen('chat');
       setNavActive('newChat');
@@ -1601,6 +1641,7 @@ def render_desktop_html() -> str:
       const target = (path || $('projectPathInput').value).trim();
       const button = $('switchProject');
       if (!target) return;
+      saveCurrentDraft();
       resetAttachments();
       button.disabled = true;
       button.textContent = '切换中...';

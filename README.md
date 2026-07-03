@@ -187,7 +187,11 @@ xaw smoke-openai-compatible --allow-skip
 
 ## Release status
 
-Current local release target: `0.14.0`, focused on provider status and form reliability.
+Current local release target: `0.15.0`, focused on scoped composer draft recovery.
+
+Version `0.14.0` is published on GitHub with provider status and form reliability:
+
+<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.14.0>
 
 Version `0.13.0` is published on GitHub with safe desktop text attachments:
 
