@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-03
 
-## v0.9.0 release target
+## v0.10.0 release target
 
 - Package: `x-agentic-workflow`
 - CLI commands:
@@ -32,6 +32,8 @@ Last updated: 2026-07-03
   after a switch.
 - Project Sessions target: desktop sessions are scoped by active workdir so the
   session list only shows conversations for the current project.
+- File Ledger target: desktop captures `write_file` tool results and renders
+  changed files plus the latest unified diff in the inspector.
 - Distribution target: `scripts/build-macos-preview-dmg.sh` builds a preview
   DMG with a bundled clean-room source snapshot for customer testing.
 
@@ -149,4 +151,12 @@ copying implementation details.
 - [x] Desktop session list filtered to active project.
 - [x] Switching projects rebuilds the matching session store.
 - [x] Same folder name under different paths maps to distinct session storage.
-- [ ] File-change ledger and diff workspace.
+
+### v0.10 File ledger
+
+- [x] Capture `write_file` tool-result metadata in desktop state.
+- [x] Render file-change ledger in the right inspector.
+- [x] Render latest unified diff in the right inspector.
+- [x] Clear file-change ledger on new desktop chat and project switch.
+- [ ] Multi-file diff selection.
+- [ ] Persisted file-change ledger per session.

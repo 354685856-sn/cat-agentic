@@ -12,7 +12,7 @@ from x_agentic_workflow.desktop import (
     _validate_project,
     render_desktop_html,
 )
-from x_agentic_workflow.types import Message, ModelResponse, ToolSpec
+from x_agentic_workflow.types import AgentEvent, Message, ModelResponse, ToolSpec
 
 
 def test_desktop_html_contains_clean_room_app_shell() -> None:
@@ -29,7 +29,10 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "inspectorToggle" in html
     assert "inspector-collapsed" in html
     assert "title=\"列表\"" in html
-    assert "输出" in html
+    assert "文件变更" in html
+    assert "Diff" in html
+    assert "latestDiff" in html
+    assert "fileChanges" in html
     assert "任务" in html
     assert "Describe a task or ask a question" in html
     assert "What’s up next, sn?" in html
@@ -50,6 +53,61 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "DeepSeek" in html
     assert "MCP" in html
     assert "Token 用量" in html
+
+
+def test_desktop_records_write_file_ledger_and_latest_diff(tmp_path: Path) -> None:
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+
+    app._record_agent_event(
+        AgentEvent(
+            kind="tool_result",
+            name="write_file",
+            content="Wrote 12 chars to README.md",
+            ok=True,
+            metadata={
+                "operation": "write_file",
+                "path": "README.md",
+                "diff": "--- a/README.md\n+++ b/README.md",
+                "existed": True,
+            },
+        )
+    )
+    state = app.state()
+
+    assert state["fileChanges"][0]["path"] == "README.md"
+    assert state["fileChanges"][0]["existed"] is True
+    assert state["latestDiff"]["diff"].startswith("--- a/README.md")
+
+
+def test_desktop_clears_file_ledger_on_new_chat_and_project_switch(tmp_path: Path) -> None:
+    target = tmp_path / "target"
+    target.mkdir()
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+    change = {"path": "one.txt", "ok": True, "existed": False, "summary": "", "diff": ""}
+    app.file_changes.append(change)
+
+    assert app.new_chat()["fileChanges"] == []
+    app.file_changes.append({**change, "path": "two.txt"})
+    switched = app.switch_project({"path": str(target)})
+
+    assert switched["fileChanges"] == []
+    assert switched["latestDiff"] is None
 
 
 def test_desktop_composer_actions_are_outside_prompt_box() -> None:

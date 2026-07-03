@@ -37,6 +37,10 @@ and Claude-style coding assistants, while using original Python code.
   - scope desktop session files to the active project path
   - filter the desktop session list to the current project
   - restore the correct project-local session list when switching back
+- Desktop File Ledger:
+  - capture `write_file` tool results in a desktop file-change ledger
+  - render changed files and the latest unified diff in the right inspector
+  - clear the ledger when starting a new desktop chat or switching projects
 - Sandboxed tools:
   - `read_file`
   - `write_file`
@@ -183,7 +187,11 @@ xaw smoke-openai-compatible --allow-skip
 
 ## Release status
 
-Current local release target: `0.9.0`, focused on desktop Project Sessions.
+Current local release target: `0.10.0`, focused on desktop File Ledger.
+
+Version `0.9.0` is published on GitHub with desktop Project Sessions:
+
+<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.9.0>
 
 Version `0.8.0` is published on GitHub with desktop Project Switching:
 

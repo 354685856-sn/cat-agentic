@@ -18,7 +18,7 @@ from typing import Any, cast
 from .agent import Agent
 from .config import ProviderConfig, RuntimeConfig
 from .sessions import SessionStore
-from .types import Message
+from .types import AgentEvent, Message
 
 SECRET_PATTERN = re.compile(
     r"(?i)(sk-[a-z0-9][a-z0-9_\-]{8,}|"
@@ -79,9 +79,10 @@ class DesktopApp:
         self.base_sessions_dir = config.sessions_dir
         self._scope_sessions_to_project(config.workdir)
         self.sessions = SessionStore(self.config.sessions_dir)
-        self.agent = Agent(config)
+        self.agent = self._new_agent()
         self.messages: list[dict[str, str]] = []
         self.project_validation: dict[str, Any] | None = None
+        self.file_changes: list[dict[str, Any]] = []
 
     def state(self) -> dict[str, Any]:
         return {
@@ -97,15 +98,18 @@ class DesktopApp:
             "messages": self.messages[-30:],
             "projectValidation": self.project_validation,
             "recentProjects": self._recent_project_entries(),
+            "fileChanges": self.file_changes[-12:],
+            "latestDiff": self.file_changes[-1] if self.file_changes else None,
         }
 
     def new_chat(self) -> dict[str, Any]:
-        self.agent = Agent(self.config)
+        self.agent = self._new_agent()
         self.messages = []
+        self.file_changes = []
         return self.state()
 
     def open_session(self, session_id: str) -> dict[str, Any]:
-        self.agent = Agent(self.config, session_id=session_id)
+        self.agent = self._new_agent(session_id=session_id)
         self.messages = [
             {"role": message.role, "content": message.content}
             for message in self.agent.messages
@@ -151,7 +155,7 @@ class DesktopApp:
         self.config.provider.base_url = base_url
         self.config.provider.api_key_env = api_key_env
         self.config.save()
-        self.agent = Agent(self.config, session_id=self.agent.session_id)
+        self.agent = self._new_agent(session_id=self.agent.session_id)
         return {
             **self.state(),
             "providerSave": {
@@ -247,8 +251,9 @@ class DesktopApp:
         self.sessions = SessionStore(self.config.sessions_dir)
         self._remember_project(target)
         self.config.save()
-        self.agent = Agent(self.config)
+        self.agent = self._new_agent()
         self.messages = []
+        self.file_changes = []
         self.project_validation = _validate_project(target)
         return {
             **self.state(),
@@ -286,6 +291,27 @@ class DesktopApp:
 
     def _scope_sessions_to_project(self, workdir: Path) -> None:
         self.config.sessions_dir = _project_sessions_dir(self.base_sessions_dir, workdir)
+
+    def _new_agent(self, session_id: str | None = None) -> Agent:
+        return Agent(self.config, session_id=session_id, event_sink=self._record_agent_event)
+
+    def _record_agent_event(self, event: AgentEvent) -> None:
+        if event.kind != "tool_result" or event.metadata.get("operation") != "write_file":
+            return
+        path = str(event.metadata.get("path", ""))
+        diff = str(event.metadata.get("diff", ""))
+        if not path:
+            return
+        self.file_changes.append(
+            {
+                "path": path,
+                "ok": bool(event.ok),
+                "existed": bool(event.metadata.get("existed", False)),
+                "summary": event.content,
+                "diff": diff,
+            }
+        )
+        self.file_changes = self.file_changes[-50:]
 
 
 def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
@@ -767,6 +793,12 @@ def render_desktop_html() -> str:
     }
     .file-row span:last-child, .task-row span:last-child { overflow: hidden; text-overflow: ellipsis; }
     .more-link { color: #999; font-size: 14px; margin-top: 6px; }
+    .diff-view {
+      max-height: 220px; overflow: auto; border: 1px solid #ececea; border-radius: 8px;
+      background: #fbfbfa; padding: 10px; color: #394150; font-size: 12px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace; line-height: 1.42; white-space: pre;
+    }
+    .empty-note { color: #a4a4a1; font-size: 14px; line-height: 1.4; }
     .source-dots { display: flex; flex-wrap: wrap; gap: 10px; color: #717171; font-size: 16px; }
     .validation-box { display: grid; gap: 10px; }
     .validation-summary { font-size: 14px; color: #30343a; line-height: 1.4; }
@@ -1031,13 +1063,12 @@ def render_desktop_html() -> str:
           </div>
         </div>
         <div class="inspector-section">
-          <div class="inspector-title">输出</div>
-          <div class="file-row"><span>▣</span><span>macos-distribution.md</span></div>
-          <div class="file-row"><span>▣</span><span>release-checklist.md</span></div>
-          <div class="file-row"><span>▣</span><span>active-context.md</span></div>
-          <div class="file-row"><span>▣</span><span>README.md</span></div>
-          <div class="file-row"><span>▣</span><span>legal-open-source-reference-map...</span></div>
-          <div class="more-link">再显示 12 个</div>
+          <div class="inspector-title">文件变更</div>
+          <div id="fileChanges"><div class="empty-note">暂无文件变更。</div></div>
+        </div>
+        <div class="inspector-section">
+          <div class="inspector-title">Diff</div>
+          <pre class="diff-view" id="latestDiff">暂无 diff。</pre>
         </div>
         <div class="inspector-section">
           <div class="inspector-title">任务</div>
@@ -1082,6 +1113,7 @@ def render_desktop_html() -> str:
         renderProjectValidation({ok: false, summary: state.projectSwitch.message, checks: [], recommendations: []});
       }
       renderRecentProjects(state.recentProjects || []);
+      renderFileChanges(state.fileChanges || [], state.latestDiff);
       $('recents').innerHTML = state.sessions.map((s, i) => `<div class="conversation-row" data-session="${s}"><span class="conversation-title">${s}</span><span class="shortcut">⌘${i + 1}</span></div>`).join('') || '<div class="conversation-row muted"><span class="conversation-title">暂无聊天</span></div>';
       $('messages').innerHTML = state.messages.map(m => `<div class="msg ${m.role}">${escapeHtml(m.content)}</div>`).join('');
       document.querySelectorAll('[data-session]').forEach(btn => btn.onclick = async () => render(await api('/api/open', {sessionId: btn.dataset.session})));
@@ -1123,6 +1155,19 @@ def render_desktop_html() -> str:
         const badge = project.active ? '当前' : `⌘${i + 1}`;
         return `<div class="conversation-row${active}"><button data-project-path="${escapeHtml(project.path)}" title="${escapeHtml(project.path)}">${escapeHtml(project.name)}</button><span class="shortcut">${badge}</span></div>`;
       }).join('');
+    }
+    function renderFileChanges(changes, latest) {
+      const box = $('fileChanges');
+      if (!changes.length) {
+        box.innerHTML = '<div class="empty-note">暂无文件变更。</div>';
+      } else {
+        box.innerHTML = changes.slice().reverse().map(change => {
+          const marker = change.ok ? '▣' : '!';
+          const state = change.existed ? 'updated' : 'created';
+          return `<div class="file-row"><span>${marker}</span><span title="${escapeHtml(change.summary)}">${escapeHtml(change.path)} · ${state}</span></div>`;
+        }).join('');
+      }
+      $('latestDiff').textContent = latest && latest.diff ? latest.diff : '暂无 diff。';
     }
     function escapeHtml(text) {
       return text.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
