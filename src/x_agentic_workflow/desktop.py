@@ -2,6 +2,7 @@
 # ruff: noqa: E501
 
 import errno
+import hashlib
 import json
 import os
 import re
@@ -75,7 +76,9 @@ class DesktopApp:
 
     def __init__(self, config: RuntimeConfig) -> None:
         self.config = config
-        self.sessions = SessionStore(config.sessions_dir)
+        self.base_sessions_dir = config.sessions_dir
+        self._scope_sessions_to_project(config.workdir)
+        self.sessions = SessionStore(self.config.sessions_dir)
         self.agent = Agent(config)
         self.messages: list[dict[str, str]] = []
         self.project_validation: dict[str, Any] | None = None
@@ -90,6 +93,7 @@ class DesktopApp:
             "workdir": str(self.config.workdir),
             "sessionId": self.agent.session_id,
             "sessions": list(reversed(self.sessions.list_sessions()[-8:])),
+            "sessionsDir": str(self.config.sessions_dir),
             "messages": self.messages[-30:],
             "projectValidation": self.project_validation,
             "recentProjects": self._recent_project_entries(),
@@ -239,6 +243,8 @@ class DesktopApp:
             }
 
         self.config.workdir = target
+        self._scope_sessions_to_project(target)
+        self.sessions = SessionStore(self.config.sessions_dir)
         self._remember_project(target)
         self.config.save()
         self.agent = Agent(self.config)
@@ -277,6 +283,9 @@ class DesktopApp:
                 }
             )
         return entries[:8]
+
+    def _scope_sessions_to_project(self, workdir: Path) -> None:
+        self.config.sessions_dir = _project_sessions_dir(self.base_sessions_dir, workdir)
 
 
 def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
@@ -358,6 +367,13 @@ def _redact_secret_match(match: re.Match[str]) -> str:
         key, _, _value = text.partition("=")
         return f"{key}=[REDACTED]"
     return "[REDACTED]"
+
+
+def _project_sessions_dir(base_dir: Path, workdir: Path) -> Path:
+    resolved = str(workdir.resolve())
+    digest = hashlib.sha256(resolved.encode("utf-8")).hexdigest()[:12]
+    slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", workdir.name).strip(".-") or "project"
+    return base_dir / "projects" / f"{slug}-{digest}"
 
 
 def _validate_project(workdir: Path) -> dict[str, Any]:

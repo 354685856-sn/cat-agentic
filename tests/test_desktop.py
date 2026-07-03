@@ -8,6 +8,7 @@ from x_agentic_workflow.config import RuntimeConfig
 from x_agentic_workflow.desktop import (
     DesktopApp,
     _create_server,
+    _project_sessions_dir,
     _validate_project,
     render_desktop_html,
 )
@@ -251,6 +252,46 @@ def test_desktop_switch_project_rejects_invalid_path(tmp_path: Path) -> None:
     assert state["projectSwitch"]["ok"] is False
     assert state["workdir"] == str(tmp_path)
     assert not (tmp_path / "config.json").exists()
+
+
+def test_desktop_sessions_are_scoped_to_active_project(tmp_path: Path) -> None:
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=first,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+    app.sessions.save("first-session", [Message(role="user", content="first")])
+
+    first_state = app.state()
+    second_state = app.switch_project({"path": str(second)})
+    app.sessions.save("second-session", [Message(role="user", content="second")])
+    returned_state = app.switch_project({"path": str(first)})
+
+    assert "first-session" in first_state["sessions"]
+    assert "first-session" not in second_state["sessions"]
+    assert "second-session" not in returned_state["sessions"]
+    assert "first-session" in returned_state["sessions"]
+    assert "/projects/" in returned_state["sessionsDir"]
+
+
+def test_project_sessions_dir_is_stable_and_path_specific(tmp_path: Path) -> None:
+    base = tmp_path / "sessions"
+    first = tmp_path / "a" / "demo"
+    second = tmp_path / "b" / "demo"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+
+    assert _project_sessions_dir(base, first) == _project_sessions_dir(base, first)
+    assert _project_sessions_dir(base, first) != _project_sessions_dir(base, second)
+    assert _project_sessions_dir(base, first).parent == base / "projects"
 
 
 def test_desktop_server_falls_back_when_preferred_port_is_busy() -> None:

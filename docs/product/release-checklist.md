@@ -2,7 +2,7 @@
 
 Last updated: 2026-07-03
 
-## v0.8.0 release target
+## v0.9.0 release target
 
 - Package: `x-agentic-workflow`
 - CLI commands:
@@ -30,6 +30,8 @@ Last updated: 2026-07-03
 - Project Switching target: the desktop UI can switch the active local workdir,
   persist recent project paths, reset chat state, and re-run project validation
   after a switch.
+- Project Sessions target: desktop sessions are scoped by active workdir so the
+  session list only shows conversations for the current project.
 - Distribution target: `scripts/build-macos-preview-dmg.sh` builds a preview
   DMG with a bundled clean-room source snapshot for customer testing.
 
@@ -140,5 +142,11 @@ copying implementation details.
 - [x] Recent project paths persisted in local config.
 - [x] Automatic validation after project switch.
 - [x] Invalid project path feedback in inspector.
-- [ ] Per-project session list.
+
+### v0.9 Project sessions
+
+- [x] Project-scoped desktop session directories.
+- [x] Desktop session list filtered to active project.
+- [x] Switching projects rebuilds the matching session store.
+- [x] Same folder name under different paths maps to distinct session storage.
 - [ ] File-change ledger and diff workspace.

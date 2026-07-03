@@ -33,6 +33,10 @@ and Claude-style coding assistants, while using original Python code.
   - switch the active local project path from the desktop UI
   - persist recent project paths in local config
   - reset the desktop chat and re-run project validation after a switch
+- Desktop Project Sessions:
+  - scope desktop session files to the active project path
+  - filter the desktop session list to the current project
+  - restore the correct project-local session list when switching back
 - Sandboxed tools:
   - `read_file`
   - `write_file`
@@ -179,7 +183,11 @@ xaw smoke-openai-compatible --allow-skip
 
 ## Release status
 
-Current local release target: `0.8.0`, focused on desktop Project Switching.
+Current local release target: `0.9.0`, focused on desktop Project Sessions.
+
+Version `0.8.0` is published on GitHub with desktop Project Switching:
+
+<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.8.0>
 
 Version `0.7.0` is published on GitHub with desktop Project Validation:
 
