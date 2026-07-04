@@ -1490,20 +1490,11 @@ def render_desktop_html() -> str:
         return !query || haystack.includes(query);
       });
       $('recents').innerHTML = visible.map((session, i) => {
-        const meta = session.fileChangeCount ? `${session.fileChangeCount} 文件` : relativeTime(session.updatedAt);
+        const meta = session.fileChangeCount
+          ? (session.updatedLabel ? `${session.updatedLabel} · ${session.fileChangeCount} 文件` : `${session.fileChangeCount} 文件`)
+          : session.updatedLabel;
         return `<div class="conversation-row" data-session="${escapeHtml(session.id)}"><span class="conversation-title" title="${escapeHtml(session.id)}">${escapeHtml(session.title)}</span><span class="session-meta">${escapeHtml(meta || `⌘${i + 1}`)}</span></div>`;
       }).join('') || '<div class="conversation-row muted"><span class="conversation-title">暂无匹配会话</span></div>';
-    }
-    function relativeTime(value) {
-      if (!value) return '';
-      const time = Date.parse(value);
-      if (!Number.isFinite(time)) return '';
-      const minutes = Math.max(0, Math.round((Date.now() - time) / 60000));
-      if (minutes < 1) return '刚刚';
-      if (minutes < 60) return `${minutes}分钟前`;
-      const hours = Math.round(minutes / 60);
-      if (hours < 24) return `${hours}小时前`;
-      return `${Math.round(hours / 24)}天前`;
     }
     function renderFileChanges(changes, latest, selectedIndex) {
       const box = $('fileChanges');
