@@ -1,8 +1,8 @@
 # x-agentic-workflow release checklist
 
-Last updated: 2026-07-03
+Last updated: 2026-07-04
 
-## v0.15.0 release target
+## v0.16.0 release target
 
 - Package: `x-agentic-workflow`
 - CLI commands:
@@ -53,6 +53,9 @@ Last updated: 2026-07-03
 - Composer Draft Recovery target: desktop persists bounded text drafts by
   project and session, restores after browser refresh, and clears after a
   successful send without persisting attachment bodies.
+- Stable Session Time target: desktop session summaries expose stable absolute
+  month-day/time labels, sort by persisted update time, and opening historical
+  sessions does not refresh their update timestamps.
 - Distribution target: `scripts/build-macos-preview-dmg.sh` builds a preview
   DMG with a bundled clean-room source snapshot for customer testing.
 

@@ -88,6 +88,8 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "saveCurrentDraft" in html
     assert "clearCurrentDraft" in html
     assert "MAX_DRAFT_CHARS" in html
+    assert "updatedLabel" in html
+    assert "relativeTime(" not in html
     assert "localStorage.setItem(currentDraftKey, draft)" in html
     assert "localStorage.removeItem(currentDraftKey)" in html
     assert "JSON.stringify(pendingAttachments)" not in html
@@ -203,6 +205,74 @@ def test_desktop_session_details_include_titles_and_counts(tmp_path: Path) -> No
     assert detail["fileChangeCount"] == 1
     assert state["sessionRestored"] is False
     assert state["sessionTitle"] == "新建会话"
+
+
+def test_desktop_session_details_use_stable_updated_labels_and_order(tmp_path: Path) -> None:
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+    app.sessions.path_for("old-session").write_text(
+        json.dumps(
+            {
+                "session_id": "old-session",
+                "updated_at": "2026-07-04T01:00:00+00:00",
+                "messages": [{"role": "user", "content": "old prompt"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    app.sessions.path_for("new-session").write_text(
+        json.dumps(
+            {
+                "session_id": "new-session",
+                "updated_at": "2026-07-04T05:12:00+00:00",
+                "messages": [{"role": "user", "content": "new prompt"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    state = app.state()
+    details = state["sessionDetails"]
+
+    assert [item["id"] for item in details] == ["new-session", "old-session"]
+    assert details[0]["title"] == "new prompt"
+    assert re.fullmatch(r"\d{2}-\d{2} \d{2}:\d{2}", details[0]["updatedLabel"])
+    assert "updatedSortKey" in details[0]
+
+
+def test_desktop_open_session_does_not_refresh_updated_time(tmp_path: Path) -> None:
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+    app.sessions.path_for("history-session").write_text(
+        json.dumps(
+            {
+                "session_id": "history-session",
+                "updated_at": "2026-07-04T05:12:00+00:00",
+                "messages": [{"role": "user", "content": "history prompt"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    before = app.sessions.session_summary("history-session")["updatedAt"]
+    app.open_session("history-session")
+    after = app.sessions.session_summary("history-session")["updatedAt"]
+
+    assert after == before
 
 
 def test_desktop_text_attachment_context_is_validated_and_formatted() -> None:

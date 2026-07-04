@@ -82,16 +82,20 @@ class SessionStore:
                     title = _compact_title(content)
                     break
         file_changes = payload.get("file_changes", [])
+        updated_at = str(payload.get("updated_at", ""))
         return {
             "id": session_id,
             "title": title,
-            "updatedAt": str(payload.get("updated_at", "")),
+            "updatedAt": updated_at,
+            "updatedLabel": _format_updated_label(updated_at),
+            "updatedSortKey": _updated_sort_key(updated_at, session_id),
             "messageCount": len(messages) if isinstance(messages, list) else 0,
             "fileChangeCount": len(file_changes) if isinstance(file_changes, list) else 0,
         }
 
     def list_session_summaries(self) -> list[dict[str, Any]]:
-        return [self.session_summary(session_id) for session_id in self.list_sessions()]
+        summaries = [self.session_summary(session_id) for session_id in self.list_sessions()]
+        return sorted(summaries, key=lambda item: str(item["updatedSortKey"]))
 
     def list_sessions(self) -> list[str]:
         return sorted(p.stem for p in self.root.glob("*.json"))
@@ -102,3 +106,27 @@ def _compact_title(text: str, limit: int = 42) -> str:
     if len(single_line) <= limit:
         return single_line
     return f"{single_line[: limit - 1]}…"
+
+
+def _format_updated_label(value: str) -> str:
+    timestamp = _parse_iso_datetime(value)
+    if timestamp is None:
+        return ""
+    local_time = timestamp.astimezone()
+    return local_time.strftime("%m-%d %H:%M")
+
+
+def _updated_sort_key(value: str, fallback: str) -> str:
+    timestamp = _parse_iso_datetime(value)
+    if timestamp is None:
+        return fallback
+    return timestamp.isoformat()
+
+
+def _parse_iso_datetime(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
