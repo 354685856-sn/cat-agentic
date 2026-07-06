@@ -70,7 +70,12 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "/api/scheduled/create" in html
     assert "/api/scheduled/delete" in html
     assert "/api/settings/general" in html
+    assert "/api/settings/h5" in html
     assert 'data-settings-view="general"' in html
+    assert 'data-settings-view="h5"' in html
+    assert 'id="h5SettingsPanel"' in html
+    assert 'id="saveH5Settings"' in html
+    assert "保存 H5 设置" in html
     assert 'id="requireCommandApproval"' in html
     assert 'id="notificationsEnabled"' in html
     assert 'id="uiScale"' in html
@@ -792,6 +797,74 @@ def test_desktop_general_settings_reject_invalid_payload(tmp_path: Path) -> None
 
     assert invalid_mode["generalSave"]["ok"] is False
     assert invalid_scale["generalSave"]["ok"] is False
+
+
+def test_desktop_h5_settings_are_validated_and_persisted(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.json"
+    config = RuntimeConfig(
+        config_file=config_file,
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+    app.desktop_host = "127.0.0.1"
+    app.desktop_port = 8765
+
+    state = app.save_h5_settings(
+        {
+            "enabled": True,
+            "bindHost": "0.0.0.0",
+            "fixedPort": "9876",
+            "keepaliveSeconds": 120,
+        }
+    )
+
+    assert state["h5Save"]["ok"] is True
+    assert state["h5Access"]["enabled"] is True
+    assert state["h5Access"]["bindHost"] == "0.0.0.0"
+    assert state["h5Access"]["fixedPort"] == 9876
+    assert state["h5Access"]["keepaliveSeconds"] == 120
+    assert state["h5Access"]["restartRequired"] is True
+    reloaded = RuntimeConfig.load(config_file=config_file, workdir=tmp_path)
+    assert reloaded.desktop_h5_enabled is True
+    assert reloaded.desktop_h5_host == "0.0.0.0"
+    assert reloaded.desktop_h5_fixed_port == 9876
+    assert reloaded.desktop_h5_keepalive_seconds == 120
+
+
+def test_desktop_h5_settings_reject_invalid_payload(tmp_path: Path) -> None:
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+
+    invalid_port = app.save_h5_settings(
+        {
+            "enabled": True,
+            "bindHost": "0.0.0.0",
+            "fixedPort": "999",
+            "keepaliveSeconds": 30,
+        }
+    )
+    invalid_keepalive = app.save_h5_settings(
+        {
+            "enabled": True,
+            "bindHost": "0.0.0.0",
+            "fixedPort": "",
+            "keepaliveSeconds": 2,
+        }
+    )
+
+    assert invalid_port["h5Save"]["ok"] is False
+    assert invalid_keepalive["h5Save"]["ok"] is False
 
 
 def test_desktop_provider_connection_error_redacts_secret(

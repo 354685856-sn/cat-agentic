@@ -53,6 +53,10 @@ class RuntimeConfig:
     desktop_send_mode: Literal["enter", "modifier-enter"] = "modifier-enter"
     desktop_ui_scale: int = 100
     desktop_notifications_enabled: bool = False
+    desktop_h5_enabled: bool = False
+    desktop_h5_host: str = "127.0.0.1"
+    desktop_h5_fixed_port: int | None = None
+    desktop_h5_keepalive_seconds: int = 30
 
     @property
     def api_key(self) -> str:
@@ -81,6 +85,21 @@ class RuntimeConfig:
                 else "ANTHROPIC_API_KEY",
             ),
         )
+        fixed_port = data.get("desktop_h5_fixed_port")
+        if isinstance(fixed_port, bool):
+            fixed_port = None
+        try:
+            parsed_fixed_port = int(fixed_port) if fixed_port is not None else None
+        except (TypeError, ValueError):
+            parsed_fixed_port = None
+        if parsed_fixed_port is not None and not 1024 <= parsed_fixed_port <= 65535:
+            parsed_fixed_port = None
+
+        try:
+            h5_keepalive = int(data.get("desktop_h5_keepalive_seconds", 30))
+        except (TypeError, ValueError):
+            h5_keepalive = 30
+
         return cls(
             provider=provider,
             max_tokens=int(data.get("max_tokens", os.environ.get("XAW_MAX_TOKENS", 4096))),
@@ -104,6 +123,11 @@ class RuntimeConfig:
             desktop_notifications_enabled=bool(
                 data.get("desktop_notifications_enabled", False)
             ),
+            desktop_h5_enabled=bool(data.get("desktop_h5_enabled", False)),
+            desktop_h5_host=str(data.get("desktop_h5_host", "127.0.0.1")).strip()
+            or "127.0.0.1",
+            desktop_h5_fixed_port=parsed_fixed_port,
+            desktop_h5_keepalive_seconds=max(5, min(3600, h5_keepalive)),
         )
 
     def validate_for_model_call(self) -> None:
@@ -131,5 +155,9 @@ class RuntimeConfig:
             "desktop_send_mode": self.desktop_send_mode,
             "desktop_ui_scale": self.desktop_ui_scale,
             "desktop_notifications_enabled": self.desktop_notifications_enabled,
+            "desktop_h5_enabled": self.desktop_h5_enabled,
+            "desktop_h5_host": self.desktop_h5_host,
+            "desktop_h5_fixed_port": self.desktop_h5_fixed_port,
+            "desktop_h5_keepalive_seconds": self.desktop_h5_keepalive_seconds,
         }
         self.config_file.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")

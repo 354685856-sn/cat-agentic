@@ -41,9 +41,16 @@ def run_desktop(
     """Start the clean-room browser UI server."""
 
     runtime_config = config or RuntimeConfig.load(workdir=Path.cwd())
+    if runtime_config.desktop_h5_enabled:
+        if host == "127.0.0.1":
+            host = runtime_config.desktop_h5_host
+        if port == 8765 and runtime_config.desktop_h5_fixed_port is not None:
+            port = runtime_config.desktop_h5_fixed_port
     app = DesktopApp(runtime_config)
     app.start_scheduler()
     server = _create_server(host, port, _handler_for(app))
+    app.desktop_host = host
+    app.desktop_port = server.server_port
     url = f"http://{host}:{server.server_port}"
     if open_browser:
         threading.Timer(0.2, lambda: webbrowser.open(url)).start()
@@ -96,6 +103,8 @@ class DesktopApp:
         self._scheduler_stop = threading.Event()
         self._scheduler_thread: threading.Thread | None = None
         self._scheduled_lock = threading.RLock()
+        self.desktop_host = "127.0.0.1"
+        self.desktop_port = 0
 
     def state(self) -> dict[str, Any]:
         visible_changes = self._visible_file_changes()
@@ -125,6 +134,7 @@ class DesktopApp:
             "scheduledTasks": self._load_scheduled_tasks(),
             "scheduledSummary": self._scheduled_summary(),
             "workspaceStatus": _workspace_status(self.config.workdir),
+            "h5Access": self._h5_access_state(),
             "generalSettings": {
                 "requireCommandApproval": self.config.require_command_approval,
                 "sendMode": self.config.desktop_send_mode,
@@ -243,6 +253,55 @@ class DesktopApp:
         return {
             **self.state(),
             "generalSave": {"ok": True, "message": "通用设置已保存并生效。"},
+        }
+
+    def save_h5_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
+        enabled = payload.get("enabled")
+        bind_host = str(payload.get("bindHost", self.config.desktop_h5_host)).strip()
+        fixed_port = payload.get("fixedPort")
+        keepalive = payload.get("keepaliveSeconds")
+        if not isinstance(enabled, bool):
+            return {**self.state(), "h5Save": {"ok": False, "message": "H5 开关格式无效。"}}
+        if bind_host not in {"127.0.0.1", "0.0.0.0"} and not _looks_like_host(bind_host):
+            return {
+                **self.state(),
+                "h5Save": {"ok": False, "message": "访问主机 / IP 格式无效。"},
+            }
+        if fixed_port in {"", None}:
+            parsed_port = None
+        elif isinstance(fixed_port, bool):
+            return {**self.state(), "h5Save": {"ok": False, "message": "固定端口格式无效。"}}
+        else:
+            try:
+                parsed_port = int(str(fixed_port))
+            except (TypeError, ValueError):
+                return {**self.state(), "h5Save": {"ok": False, "message": "固定端口格式无效。"}}
+            if not 1024 <= parsed_port <= 65535:
+                return {
+                    **self.state(),
+                    "h5Save": {"ok": False, "message": "固定端口必须在 1024 到 65535 之间。"},
+                }
+        if isinstance(keepalive, bool):
+            return {**self.state(), "h5Save": {"ok": False, "message": "断连保活时间格式无效。"}}
+        try:
+            parsed_keepalive = int(str(keepalive))
+        except (TypeError, ValueError):
+            return {**self.state(), "h5Save": {"ok": False, "message": "断连保活时间格式无效。"}}
+        if not 5 <= parsed_keepalive <= 3600:
+            return {
+                **self.state(),
+                "h5Save": {"ok": False, "message": "断连保活时间必须在 5 到 3600 秒之间。"},
+            }
+
+        self.config.desktop_h5_enabled = enabled
+        self.config.desktop_h5_host = bind_host
+        self.config.desktop_h5_fixed_port = parsed_port
+        self.config.desktop_h5_keepalive_seconds = parsed_keepalive
+        self.config.save()
+        restart_note = "监听地址或端口改变后，需要重启桌面端才会切换到新地址。"
+        return {
+            **self.state(),
+            "h5Save": {"ok": True, "message": f"H5 访问设置已保存。{restart_note}"},
         }
 
     def test_provider_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -717,6 +776,31 @@ class DesktopApp:
             return "新建会话"
         return str(self.sessions.session_summary(self.agent.session_id)["title"])
 
+    def _h5_access_state(self) -> dict[str, Any]:
+        current_host = self.desktop_host
+        display_host = _display_host_for_h5(current_host)
+        current_port = self.desktop_port
+        current_url = f"http://{display_host}:{current_port}" if current_port else ""
+        return {
+            "enabled": self.config.desktop_h5_enabled,
+            "bindHost": self.config.desktop_h5_host,
+            "fixedPort": self.config.desktop_h5_fixed_port,
+            "keepaliveSeconds": self.config.desktop_h5_keepalive_seconds,
+            "currentHost": current_host,
+            "currentPort": current_port,
+            "currentUrl": current_url,
+            "restartRequired": (
+                self.config.desktop_h5_enabled
+                and (
+                    self.config.desktop_h5_host != current_host
+                    or (
+                        self.config.desktop_h5_fixed_port is not None
+                        and self.config.desktop_h5_fixed_port != current_port
+                    )
+                )
+            ),
+        }
+
 
 def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
     class DesktopHandler(BaseHTTPRequestHandler):
@@ -759,6 +843,9 @@ def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
                 return
             if self.path == "/api/settings/general":
                 self._send_json(app.save_general_settings(payload))
+                return
+            if self.path == "/api/settings/h5":
+                self._send_json(app.save_h5_settings(payload))
                 return
             if self.path == "/api/project/validate":
                 self._send_json(app.validate_project())
@@ -807,6 +894,32 @@ def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
             self.wfile.write(data)
 
     return DesktopHandler
+
+
+def _looks_like_host(value: str) -> bool:
+    if not value or len(value) > 255:
+        return False
+    if value in {"localhost", "0.0.0.0"}:
+        return True
+    if re.fullmatch(r"[A-Za-z0-9.-]+", value) is None:
+        return False
+    return ".." not in value and not value.startswith(".") and not value.endswith(".")
+
+
+def _display_host_for_h5(host: str) -> str:
+    if host in {"0.0.0.0", "::"}:
+        return _lan_ip()
+    return host
+
+
+def _lan_ip() -> str:
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.settimeout(0.2)
+            sock.connect(("8.8.8.8", 80))
+            return str(sock.getsockname()[0])
+    except OSError:
+        return "127.0.0.1"
 
 
 def _redact_provider_error(message: str, api_key_env: str) -> str:
@@ -1490,6 +1603,14 @@ def render_desktop_html() -> str:
     .general-section { display: grid; gap: 10px; }
     .general-section h3 { margin: 0; color: #202633; font-size: 20px; }
     .general-section > p { margin: 0; color: #7a8798; font-size: 15px; line-height: 1.5; }
+    .h5-grid { display: grid; grid-template-columns: minmax(0, 1fr) 220px 180px; gap: 12px; align-items: end; }
+    .h5-status { display: flex; align-items: center; gap: 10px; color: #697586; font-size: 15px; }
+    .h5-status strong { color: #202633; }
+    .h5-link {
+      display: block; margin-top: 12px; border: 1px solid #dfe6ef; border-radius: 8px;
+      padding: 12px 14px; color: #2f5f8f; background: white; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
     .setting-card {
       border: 1px solid #dfe6ef; border-radius: 8px; padding: 16px 18px; background: #fbfcfe;
       display: grid; gap: 12px;
@@ -1941,7 +2062,7 @@ def render_desktop_html() -> str:
             <div class="settings-nav">
               <button class="active" data-settings-view="provider"><span>▤</span><span class="settings-nav-label">服务商</span></button>
               <button data-settings-view="general"><span>☷</span><span class="settings-nav-label">通用</span></button>
-              <button class="pending" disabled><span>⌗</span><span class="settings-nav-label">H5 访问</span><span class="settings-nav-status">后续</span></button>
+              <button data-settings-view="h5"><span>⌗</span><span class="settings-nav-label">H5 访问</span></button>
               <button class="pending" disabled><span>▰</span><span class="settings-nav-label">IM 接入</span><span class="settings-nav-status">后续</span></button>
               <button class="pending" disabled><span>▣</span><span class="settings-nav-label">终端</span><span class="settings-nav-status">后续</span></button>
               <button class="pending" disabled><span>▤</span><span class="settings-nav-label">MCP</span><span class="settings-nav-status">后续</span></button>
@@ -2044,6 +2165,57 @@ def render_desktop_html() -> str:
                 <div class="general-actions">
                   <button class="primary-btn" id="saveGeneralSettings">保存通用设置</button>
                   <div class="settings-result" id="generalResult"></div>
+                </div>
+              </div>
+            </div>
+            <div class="settings-panel" id="h5SettingsPanel">
+              <div class="settings-head">
+                <div>
+                  <div class="settings-title">H5 访问</div>
+                  <div class="settings-subtitle">在局域网内开放桌面端 H5 页面，手机通过当前服务地址连接。</div>
+                </div>
+                <div class="provider-save-status" id="h5SaveStatus">本机服务</div>
+              </div>
+              <div class="general-sections">
+                <section class="general-section">
+                  <h3>访问状态</h3>
+                  <p>当前桌面端已经运行的 HTTP 服务地址。绑定地址和固定端口变更后，需要重启桌面端才会切换监听。</p>
+                  <div class="setting-card">
+                    <div class="setting-row">
+                      <div class="setting-copy">
+                        <div class="setting-name">启用 H5 访问</div>
+                        <div class="setting-help">开启后，下次启动会按这里保存的主机和端口启动桌面服务。</div>
+                      </div>
+                      <label class="toggle-control"><input type="checkbox" id="h5Enabled" /><span></span></label>
+                    </div>
+                    <div class="h5-status"><span>当前端口</span><strong id="h5CurrentPort">-</strong><span id="h5RestartStatus"></span></div>
+                    <a class="h5-link" id="h5CurrentUrl" href="#" target="_blank" rel="noreferrer">当前服务未启动</a>
+                  </div>
+                </section>
+                <section class="general-section">
+                  <h3>连接设置</h3>
+                  <p>普通本机访问使用 127.0.0.1；要让手机访问，启动时应监听 0.0.0.0，并确保同一局域网可达。</p>
+                  <div class="setting-card h5-grid">
+                    <div class="field">
+                      <label for="h5BindHost">访问主机 / IP</label>
+                      <select id="h5BindHost">
+                        <option value="127.0.0.1">127.0.0.1（仅本机）</option>
+                        <option value="0.0.0.0">0.0.0.0（局域网）</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="h5FixedPort">固定端口</label>
+                      <input id="h5FixedPort" inputmode="numeric" placeholder="自动" />
+                    </div>
+                    <div class="field">
+                      <label for="h5Keepalive">断连保活（秒）</label>
+                      <input id="h5Keepalive" inputmode="numeric" placeholder="30" />
+                    </div>
+                  </div>
+                </section>
+                <div class="general-actions">
+                  <button class="primary-btn" id="saveH5Settings">保存 H5 设置</button>
+                  <div class="settings-result" id="h5Result"></div>
                 </div>
               </div>
             </div>
@@ -2152,9 +2324,11 @@ def render_desktop_html() -> str:
       $('model').textContent = state.model;
       renderProviderState(state);
       renderGeneralSettings(state);
+      renderH5Settings(state);
       if (state.providerSave) showProviderResult(state.providerSave);
       if (state.providerTest) showProviderResult(state.providerTest);
       if (state.generalSave) showGeneralResult(state.generalSave);
+      if (state.h5Save) showH5Result(state.h5Save);
       renderProjectValidation(state.projectValidation);
       if (state.projectSwitch && !state.projectSwitch.ok) {
         renderProjectValidation({ok: false, summary: state.projectSwitch.message, checks: [], recommendations: []});
@@ -2308,6 +2482,45 @@ def render_desktop_html() -> str:
       } finally {
         button.disabled = false;
         button.textContent = '保存通用设置';
+      }
+    }
+    function renderH5Settings(state) {
+      const h5 = state.h5Access || {};
+      $('h5Enabled').checked = !!h5.enabled;
+      $('h5BindHost').value = h5.bindHost || '127.0.0.1';
+      $('h5FixedPort').value = h5.fixedPort || '';
+      $('h5Keepalive').value = h5.keepaliveSeconds || 30;
+      $('h5CurrentPort').textContent = h5.currentPort || '-';
+      const url = h5.currentUrl || '';
+      $('h5CurrentUrl').textContent = url || '当前服务未启动';
+      $('h5CurrentUrl').href = url || '#';
+      $('h5RestartStatus').textContent = h5.restartRequired ? '需要重启后生效' : '当前配置已生效';
+      $('h5RestartStatus').className = h5.restartRequired ? 'badge hot' : 'badge';
+      $('h5SaveStatus').textContent = h5.enabled ? '已启用' : '未启用';
+    }
+    function h5Payload() {
+      return {
+        enabled: $('h5Enabled').checked,
+        bindHost: $('h5BindHost').value,
+        fixedPort: $('h5FixedPort').value.trim(),
+        keepaliveSeconds: Number($('h5Keepalive').value)
+      };
+    }
+    function showH5Result(result) {
+      const box = $('h5Result');
+      box.textContent = result.message;
+      box.classList.toggle('ok', !!result.ok);
+      box.classList.toggle('bad', !result.ok);
+    }
+    async function saveH5Settings() {
+      const button = $('saveH5Settings');
+      button.disabled = true;
+      button.textContent = '保存中...';
+      try {
+        render(await api('/api/settings/h5', h5Payload()));
+      } finally {
+        button.disabled = false;
+        button.textContent = '保存 H5 设置';
       }
     }
     function showCompletionNotification(state) {
@@ -2605,10 +2818,11 @@ def render_desktop_html() -> str:
     $('testProvider').onclick = () => runProviderAction('test');
     document.querySelectorAll('[data-settings-view]').forEach(button => {
       button.onclick = () => {
-        const provider = button.dataset.settingsView === 'provider';
+        const view = button.dataset.settingsView;
         document.querySelectorAll('[data-settings-view]').forEach(item => item.classList.toggle('active', item === button));
-        $('providerSettingsPanel').classList.toggle('active', provider);
-        $('generalSettingsPanel').classList.toggle('active', !provider);
+        $('providerSettingsPanel').classList.toggle('active', view === 'provider');
+        $('generalSettingsPanel').classList.toggle('active', view === 'general');
+        $('h5SettingsPanel').classList.toggle('active', view === 'h5');
       };
     });
     document.querySelectorAll('[data-send-mode]').forEach(button => {
@@ -2621,6 +2835,7 @@ def render_desktop_html() -> str:
       $('uiScaleValue').textContent = `${$('uiScale').value}%`;
     });
     $('saveGeneralSettings').onclick = saveGeneralSettings;
+    $('saveH5Settings').onclick = saveH5Settings;
     async function switchProject(path) {
       const target = (path || $('projectPathInput').value).trim();
       const button = $('switchProject');
