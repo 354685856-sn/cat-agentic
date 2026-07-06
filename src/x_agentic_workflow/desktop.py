@@ -20,6 +20,7 @@ from .agent import Agent
 from .config import ProviderConfig, RuntimeConfig
 from .mcp import McpRegistry
 from .sessions import SessionStore
+from .skills import SkillRegistry
 from .types import AgentEvent, Message
 
 SECRET_PATTERN = re.compile(
@@ -137,6 +138,7 @@ class DesktopApp:
             "workspaceStatus": _workspace_status(self.config.workdir),
             "h5Access": self._h5_access_state(),
             "mcpSettings": self._mcp_settings_state(),
+            "skillsSettings": self._skills_settings_state(),
             "generalSettings": {
                 "requireCommandApproval": self.config.require_command_approval,
                 "sendMode": self.config.desktop_send_mode,
@@ -841,12 +843,68 @@ class DesktopApp:
             "remote": remote,
         }
 
+    def _skills_settings_state(self) -> dict[str, Any]:
+        registry = SkillRegistry(self.config.skills_dir)
+        try:
+            skills = registry.discover()
+        except OSError as exc:
+            return {
+                "skillsDir": str(self.config.skills_dir),
+                "ok": False,
+                "error": str(exc),
+                "skills": [],
+                "total": 0,
+                "withDescription": 0,
+                "sources": 0,
+                "estimatedChars": 0,
+            }
+        items = []
+        estimated_chars = 0
+        sources: set[str] = set()
+        for skill in skills:
+            try:
+                stat = skill.path.stat()
+                size = stat.st_size
+                updated = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
+            except OSError:
+                size = 0
+                updated = ""
+            relative_path = str(skill.path.relative_to(self.config.skills_dir))
+            source = relative_path.split("/", 1)[0] if "/" in relative_path else "user"
+            sources.add(source)
+            estimated_chars += len(skill.content)
+            items.append(
+                {
+                    "name": skill.name,
+                    "description": skill.description,
+                    "path": str(skill.path),
+                    "relativePath": relative_path,
+                    "source": source,
+                    "sizeBytes": size,
+                    "updated": updated,
+                }
+            )
+        return {
+            "skillsDir": str(self.config.skills_dir),
+            "ok": True,
+            "error": "",
+            "skills": items,
+            "total": len(items),
+            "withDescription": sum(1 for item in items if item["description"]),
+            "sources": len(sources),
+            "estimatedChars": estimated_chars,
+        }
+
 
 def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
     class DesktopHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - stdlib callback name
             if self.path in {"/", "/index.html"}:
                 self._send_html(render_desktop_html())
+                return
+            if self.path == "/favicon.ico":
+                self.send_response(HTTPStatus.NO_CONTENT)
+                self.end_headers()
                 return
             if self.path == "/api/state":
                 self._send_json(app.state())
@@ -862,6 +920,9 @@ def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
                 return
             if self.path == "/api/mcp":
                 self._send_json(app.state()["mcpSettings"])
+                return
+            if self.path == "/api/skills":
+                self._send_json(app.state()["skillsSettings"])
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -1668,6 +1729,19 @@ def render_desktop_html() -> str:
     .mcp-server-name { color: #202633; font-size: 18px; font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .mcp-server-meta { color: #7a8798; font-size: 14px; line-height: 1.45; word-break: break-word; }
     .mcp-empty { border: 1px dashed #d8e0ea; border-radius: 8px; color: #7a8798; padding: 22px; background: #fbfcfe; }
+    .skills-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
+    .skills-search {
+      height: 44px; border: 1px solid #d9e1ec; border-radius: 8px; padding: 0 14px;
+      font: inherit; background: white; color: #202633;
+    }
+    .skills-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .skill-list { display: grid; gap: 10px; }
+    .skill-card { border: 1px solid #dfe6ef; border-radius: 8px; background: white; padding: 15px 18px; display: grid; gap: 8px; }
+    .skill-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+    .skill-name { color: #202633; font-size: 18px; font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .skill-description { color: #536172; font-size: 14px; line-height: 1.5; }
+    .skill-meta { color: #7a8798; font-size: 13px; line-height: 1.45; word-break: break-word; }
+    .skill-empty { border: 1px dashed #d8e0ea; border-radius: 8px; color: #7a8798; padding: 22px; background: #fbfcfe; }
     .setting-card {
       border: 1px solid #dfe6ef; border-radius: 8px; padding: 16px 18px; background: #fbfcfe;
       display: grid; gap: 12px;
@@ -2124,7 +2198,7 @@ def render_desktop_html() -> str:
               <button class="pending" disabled><span>▣</span><span class="settings-nav-label">终端</span><span class="settings-nav-status">后续</span></button>
               <button data-settings-view="mcp"><span>▤</span><span class="settings-nav-label">MCP</span></button>
               <button class="pending" disabled><span>▦</span><span class="settings-nav-label">Agents</span><span class="settings-nav-status">后续</span></button>
-              <button class="pending" disabled><span>✦</span><span class="settings-nav-label">技能</span><span class="settings-nav-status">后续</span></button>
+              <button data-settings-view="skills"><span>✦</span><span class="settings-nav-label">技能</span></button>
               <button class="pending" disabled><span>▧</span><span class="settings-nav-label">记忆</span><span class="settings-nav-status">后续</span></button>
               <button class="pending" disabled><span>⌘</span><span class="settings-nav-label">插件</span><span class="settings-nav-status">后续</span></button>
               <button class="pending" disabled><span>◉</span><span class="settings-nav-label">Computer Use</span><span class="settings-nav-status">后续</span></button>
@@ -2307,6 +2381,42 @@ def render_desktop_html() -> str:
                 </section>
               </div>
             </div>
+            <div class="settings-panel" id="skillsSettingsPanel">
+              <div class="settings-head">
+                <div>
+                  <div class="settings-title">技能</div>
+                  <div class="settings-subtitle">浏览本机技能目录中可被 Agent 按名称触发的 Markdown 技能。</div>
+                </div>
+                <button class="secondary-btn" id="refreshSkillsSettings">刷新</button>
+              </div>
+              <div class="general-sections">
+                <section class="general-section">
+                  <h3>技能目录</h3>
+                  <p>当前版本读取本机技能索引，不展示完整正文，也不安装外部技能。</p>
+                  <div class="setting-card">
+                    <div class="mcp-config-path" id="skillsDir">-</div>
+                    <div class="settings-result" id="skillsResult"></div>
+                  </div>
+                </section>
+                <section class="general-section">
+                  <h3>技能概览</h3>
+                  <div class="skills-summary-grid">
+                    <div class="mcp-stat"><span>技能总数</span><strong id="skillsTotal">0</strong></div>
+                    <div class="mcp-stat"><span>有描述</span><strong id="skillsDescribed">0</strong></div>
+                    <div class="mcp-stat"><span>来源数</span><strong id="skillsSources">0</strong></div>
+                    <div class="mcp-stat"><span>约字符</span><strong id="skillsChars">0</strong></div>
+                  </div>
+                </section>
+                <section class="general-section">
+                  <h3>已安装技能</h3>
+                  <div class="skills-toolbar">
+                    <input class="skills-search" id="skillsSearch" placeholder="搜索技能名称、描述或路径..." />
+                    <span class="badge" id="skillsFilterCount">0</span>
+                  </div>
+                  <div class="skill-list" id="skillsList"></div>
+                </section>
+              </div>
+            </div>
           </div>
         </div>
         <div class="screen" id="scheduledScreen">
@@ -2414,6 +2524,7 @@ def render_desktop_html() -> str:
       renderGeneralSettings(state);
       renderH5Settings(state);
       renderMcpSettings(state.mcpSettings || {});
+      renderSkillsSettings(state.skillsSettings || {});
       if (state.providerSave) showProviderResult(state.providerSave);
       if (state.providerTest) showProviderResult(state.providerTest);
       if (state.generalSave) showGeneralResult(state.generalSave);
@@ -2653,6 +2764,64 @@ def render_desktop_html() -> str:
       button.textContent = '刷新中...';
       try {
         renderMcpSettings(await api('/api/mcp'));
+      } finally {
+        button.disabled = false;
+        button.textContent = '刷新';
+      }
+    }
+    function formatCompactNumber(value) {
+      const number = Number(value || 0);
+      if (number >= 1000000) return `${Math.round(number / 100000) / 10}M`;
+      if (number >= 1000) return `${Math.round(number / 100) / 10}K`;
+      return String(number);
+    }
+    function renderSkillsSettings(skillsState) {
+      const skills = skillsState.skills || [];
+      $('skillsDir').textContent = skillsState.skillsDir || '-';
+      $('skillsTotal').textContent = String(skillsState.total || 0);
+      $('skillsDescribed').textContent = String(skillsState.withDescription || 0);
+      $('skillsSources').textContent = String(skillsState.sources || 0);
+      $('skillsChars').textContent = formatCompactNumber(skillsState.estimatedChars || 0);
+      const result = $('skillsResult');
+      if (skillsState.ok === false) {
+        result.textContent = `技能读取失败：${skillsState.error || '未知错误'}`;
+        result.classList.add('bad');
+        result.classList.remove('ok');
+      } else {
+        result.textContent = '技能索引已读取。这里只展示摘要，不加载完整正文。';
+        result.classList.add('ok');
+        result.classList.remove('bad');
+      }
+      renderSkillList(skills);
+    }
+    function renderSkillList(skills) {
+      const query = ($('skillsSearch').value || '').trim().toLowerCase();
+      const filtered = skills.filter(skill => {
+        const text = [skill.name, skill.description, skill.relativePath, skill.source].join(' ').toLowerCase();
+        return !query || text.includes(query);
+      });
+      $('skillsFilterCount').textContent = `${filtered.length}/${skills.length}`;
+      const list = $('skillsList');
+      if (!filtered.length) {
+        list.innerHTML = '<div class="skill-empty">暂无匹配技能。</div>';
+        return;
+      }
+      list.innerHTML = filtered.map(skill => {
+        const description = skill.description || '没有描述。';
+        const meta = `${skill.relativePath || skill.path || ''} · ${skill.updated || '未知时间'} · ${formatCompactNumber(skill.sizeBytes || 0)}B`;
+        return `<div class="skill-card">
+          <div class="skill-head"><div class="skill-name">${escapeHtml(skill.name || 'unnamed')}</div><span class="badge">${escapeHtml(skill.source || 'user')}</span></div>
+          <div class="skill-description">${escapeHtml(description)}</div>
+          <div class="skill-meta">${escapeHtml(meta)}</div>
+        </div>`;
+      }).join('');
+    }
+    async function refreshSkillsSettings() {
+      const button = $('refreshSkillsSettings');
+      button.disabled = true;
+      button.textContent = '刷新中...';
+      try {
+        renderSkillsSettings(await api('/api/skills'));
       } finally {
         button.disabled = false;
         button.textContent = '刷新';
@@ -2959,6 +3128,7 @@ def render_desktop_html() -> str:
         $('generalSettingsPanel').classList.toggle('active', view === 'general');
         $('h5SettingsPanel').classList.toggle('active', view === 'h5');
         $('mcpSettingsPanel').classList.toggle('active', view === 'mcp');
+        $('skillsSettingsPanel').classList.toggle('active', view === 'skills');
       };
     });
     document.querySelectorAll('[data-send-mode]').forEach(button => {
@@ -2973,6 +3143,11 @@ def render_desktop_html() -> str:
     $('saveGeneralSettings').onclick = saveGeneralSettings;
     $('saveH5Settings').onclick = saveH5Settings;
     $('refreshMcpSettings').onclick = refreshMcpSettings;
+    $('refreshSkillsSettings').onclick = refreshSkillsSettings;
+    $('skillsSearch').addEventListener('input', async () => {
+      const state = await api('/api/skills');
+      renderSkillsSettings(state);
+    });
     async function switchProject(path) {
       const target = (path || $('projectPathInput').value).trim();
       const button = $('switchProject');

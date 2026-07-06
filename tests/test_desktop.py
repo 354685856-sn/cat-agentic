@@ -72,15 +72,21 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "/api/settings/general" in html
     assert "/api/settings/h5" in html
     assert "/api/mcp" in html
+    assert "/api/skills" in html
     assert 'data-settings-view="general"' in html
     assert 'data-settings-view="h5"' in html
     assert 'data-settings-view="mcp"' in html
+    assert 'data-settings-view="skills"' in html
     assert 'id="h5SettingsPanel"' in html
     assert 'id="saveH5Settings"' in html
     assert "保存 H5 设置" in html
     assert 'id="mcpSettingsPanel"' in html
     assert 'id="refreshMcpSettings"' in html
     assert "MCP 配置文件" in html
+    assert 'id="skillsSettingsPanel"' in html
+    assert 'id="refreshSkillsSettings"' in html
+    assert 'id="skillsSearch"' in html
+    assert "技能目录" in html
     assert 'id="requireCommandApproval"' in html
     assert 'id="notificationsEnabled"' in html
     assert 'id="uiScale"' in html
@@ -932,6 +938,44 @@ def test_desktop_mcp_settings_reports_invalid_config(tmp_path: Path) -> None:
     assert mcp["ok"] is False
     assert mcp["exists"] is True
     assert mcp["servers"] == []
+
+
+def test_desktop_skills_settings_read_local_skill_summaries(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    skill_path = skills_dir / "coding" / "review.md"
+    skill_path.parent.mkdir(parents=True)
+    skill_path.write_text(
+        "\n".join(
+            [
+                "name: code-review",
+                "description: Review code changes for regressions.",
+                "",
+                "# Private body",
+                "This full body should not be returned by the desktop settings API.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=skills_dir,
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+
+    skills = app.state()["skillsSettings"]
+
+    assert skills["ok"] is True
+    assert skills["total"] == 1
+    assert skills["withDescription"] == 1
+    assert skills["sources"] == 1
+    assert skills["skills"][0]["name"] == "code-review"
+    assert skills["skills"][0]["description"] == "Review code changes for regressions."
+    assert skills["skills"][0]["relativePath"] == "coding/review.md"
+    assert "full body should not be returned" not in json.dumps(skills)
 
 
 def test_desktop_provider_connection_error_redacts_secret(
