@@ -71,6 +71,8 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "/api/scheduled/delete" in html
     assert "/api/settings/general" in html
     assert "/api/settings/h5" in html
+    assert "/api/terminal" in html
+    assert "/api/terminal/probe" in html
     assert "/api/mcp" in html
     assert "/api/agents" in html
     assert "/api/skills" in html
@@ -78,6 +80,7 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "/api/memory/preview" in html
     assert 'data-settings-view="general"' in html
     assert 'data-settings-view="h5"' in html
+    assert 'data-settings-view="terminal"' in html
     assert 'data-settings-view="mcp"' in html
     assert 'data-settings-view="agents"' in html
     assert 'data-settings-view="skills"' in html
@@ -85,6 +88,10 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert 'id="h5SettingsPanel"' in html
     assert 'id="saveH5Settings"' in html
     assert "保存 H5 设置" in html
+    assert 'id="terminalSettingsPanel"' in html
+    assert 'id="refreshTerminalSettings"' in html
+    assert 'id="runTerminalProbe"' in html
+    assert "探针输出" in html
     assert 'id="mcpSettingsPanel"' in html
     assert 'id="refreshMcpSettings"' in html
     assert "MCP 配置文件" in html
@@ -950,6 +957,36 @@ def test_desktop_mcp_settings_reports_invalid_config(tmp_path: Path) -> None:
     assert mcp["ok"] is False
     assert mcp["exists"] is True
     assert mcp["servers"] == []
+
+
+def test_desktop_terminal_settings_reports_runtime_and_probe(tmp_path: Path) -> None:
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+        require_command_approval=False,
+        max_output_chars=1234,
+    )
+    app = DesktopApp(config)
+
+    terminal = app.state()["terminalSettings"]
+
+    assert terminal["ok"] is True
+    assert terminal["workdir"] == str(tmp_path)
+    assert terminal["approvalRequired"] is False
+    assert terminal["maxOutputChars"] == 1234
+    assert terminal["commandTimeoutSeconds"] == 120
+    assert terminal["runCommandEnabled"] is True
+    assert "run_command" in terminal["tools"]
+
+    probe = app.terminal_probe()["terminalProbe"]
+
+    assert probe["ok"] is True
+    assert probe["exitCode"] == 0
+    assert f"cwd: {tmp_path}" in probe["output"]
 
 
 def test_desktop_agents_settings_reports_builtin_roles(tmp_path: Path) -> None:

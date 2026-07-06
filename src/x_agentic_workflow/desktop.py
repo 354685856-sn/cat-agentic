@@ -23,6 +23,7 @@ from .mcp import McpRegistry
 from .multi_agent import DEFAULT_ROLES
 from .sessions import SessionStore
 from .skills import SkillRegistry
+from .tools import tool_specs
 from .types import AgentEvent, Message
 
 SECRET_PATTERN = re.compile(
@@ -36,6 +37,7 @@ MAX_ATTACHMENT_TOTAL_BYTES = 256 * 1024
 SCHEDULER_INTERVAL_SECONDS = 30
 MEMORY_PREVIEW_CHARS = 12_000
 MEMORY_SCAN_LIMIT = 120
+COMMAND_TIMEOUT_SECONDS = 120
 
 
 def run_desktop(
@@ -141,6 +143,7 @@ class DesktopApp:
             "scheduledSummary": self._scheduled_summary(),
             "workspaceStatus": _workspace_status(self.config.workdir),
             "h5Access": self._h5_access_state(),
+            "terminalSettings": self._terminal_settings_state(),
             "mcpSettings": self._mcp_settings_state(),
             "agentsSettings": self._agents_settings_state(),
             "skillsSettings": self._skills_settings_state(),
@@ -811,6 +814,58 @@ class DesktopApp:
             ),
         }
 
+    def _terminal_settings_state(self) -> dict[str, Any]:
+        specs = tool_specs()
+        tool_names = [spec.name for spec in specs]
+        shell = os.environ.get("SHELL") or "/bin/sh"
+        return {
+            "ok": True,
+            "error": "",
+            "workdir": str(self.config.workdir),
+            "shell": shell,
+            "approvalRequired": self.config.require_command_approval,
+            "maxOutputChars": self.config.max_output_chars,
+            "commandTimeoutSeconds": COMMAND_TIMEOUT_SECONDS,
+            "runCommandEnabled": "run_command" in tool_names,
+            "tools": tool_names,
+            "writable": os.access(self.config.workdir, os.W_OK),
+        }
+
+    def terminal_probe(self) -> dict[str, Any]:
+        command = (
+            "printf 'cwd: '; pwd; "
+            "printf 'shell: '; printf '%s\\n' \"${SHELL:-/bin/sh}\"; "
+            "printf 'git: '; git rev-parse --is-inside-work-tree 2>/dev/null || printf 'false\\n'"
+        )
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=self.config.workdir,
+                shell=True,
+                text=True,
+                capture_output=True,
+                timeout=5,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            return {
+                **self.state(),
+                "terminalProbe": {
+                    "ok": False,
+                    "message": f"{type(exc).__name__}: {exc}",
+                    "output": "",
+                },
+            }
+        output = ((completed.stdout or "") + (completed.stderr or "")).strip()
+        return {
+            **self.state(),
+            "terminalProbe": {
+                "ok": completed.returncode == 0,
+                "message": "终端探针已运行。" if completed.returncode == 0 else "终端探针返回非零退出码。",
+                "exitCode": completed.returncode,
+                "output": output[:4_000],
+            },
+        }
+
     def _mcp_settings_state(self) -> dict[str, Any]:
         registry = McpRegistry(self.config.mcp_config_file)
         try:
@@ -997,6 +1052,9 @@ def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
             if request_path == "/api/mcp":
                 self._send_json(app.state()["mcpSettings"])
                 return
+            if request_path == "/api/terminal":
+                self._send_json(app.state()["terminalSettings"])
+                return
             if request_path == "/api/agents":
                 self._send_json(app.state()["agentsSettings"])
                 return
@@ -1036,6 +1094,9 @@ def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
                 return
             if self.path == "/api/settings/h5":
                 self._send_json(app.save_h5_settings(payload))
+                return
+            if self.path == "/api/terminal/probe":
+                self._send_json(app.terminal_probe())
                 return
             if self.path == "/api/project/validate":
                 self._send_json(app.validate_project())
@@ -1915,6 +1976,26 @@ def render_desktop_html() -> str:
     .mcp-server-name { color: #202633; font-size: 18px; font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .mcp-server-meta { color: #7a8798; font-size: 14px; line-height: 1.45; word-break: break-word; }
     .mcp-empty { border: 1px dashed #d8e0ea; border-radius: 8px; color: #7a8798; padding: 22px; background: #fbfcfe; }
+    .terminal-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+    .terminal-console {
+      border: 1px solid #121826; border-radius: 8px; background: #0f1115; color: #d8dee9;
+      min-height: 360px; overflow: hidden; box-shadow: 0 16px 42px rgba(15,17,21,.14);
+    }
+    .terminal-console-head {
+      height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 14px;
+      padding: 0 16px; background: #171b23; border-bottom: 1px solid #252b36;
+    }
+    .terminal-lights { display: flex; gap: 8px; }
+    .terminal-lights span { width: 11px; height: 11px; border-radius: 50%; display: block; }
+    .terminal-lights span:nth-child(1) { background: #ff5f57; }
+    .terminal-lights span:nth-child(2) { background: #febc2e; }
+    .terminal-lights span:nth-child(3) { background: #28c840; }
+    .terminal-console-title { color: #aab4c3; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .terminal-output {
+      margin: 0; padding: 18px; white-space: pre-wrap; word-break: break-word; min-height: 316px;
+      color: #d8dee9; font-size: 14px; line-height: 1.55; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .terminal-meta-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
     .agents-hero {
       border: 1px solid #dfe6ef; border-radius: 8px; background: #fbfcfe; padding: 22px 26px;
       display: grid; grid-template-columns: minmax(0, 1fr) repeat(3, 128px); gap: 18px; align-items: center;
@@ -2419,7 +2500,7 @@ def render_desktop_html() -> str:
               <button data-settings-view="general"><span>☷</span><span class="settings-nav-label">通用</span></button>
               <button data-settings-view="h5"><span>⌗</span><span class="settings-nav-label">H5 访问</span></button>
               <button class="pending" disabled><span>▰</span><span class="settings-nav-label">IM 接入</span><span class="settings-nav-status">后续</span></button>
-              <button class="pending" disabled><span>▣</span><span class="settings-nav-label">终端</span><span class="settings-nav-status">后续</span></button>
+              <button data-settings-view="terminal"><span>▣</span><span class="settings-nav-label">终端</span></button>
               <button data-settings-view="mcp"><span>▤</span><span class="settings-nav-label">MCP</span></button>
               <button data-settings-view="agents"><span>▦</span><span class="settings-nav-label">Agents</span></button>
               <button data-settings-view="skills"><span>✦</span><span class="settings-nav-label">技能</span></button>
@@ -2572,6 +2653,47 @@ def render_desktop_html() -> str:
                   <button class="primary-btn" id="saveH5Settings">保存 H5 设置</button>
                   <div class="settings-result" id="h5Result"></div>
                 </div>
+              </div>
+            </div>
+            <div class="settings-panel" id="terminalSettingsPanel">
+              <div class="settings-head">
+                <div>
+                  <div class="settings-title">终端</div>
+                  <div class="settings-subtitle">查看本机命令执行环境，并运行只读探针确认终端后端可用。</div>
+                </div>
+                <div class="provider-actions">
+                  <button class="secondary-btn" id="refreshTerminalSettings">刷新</button>
+                  <button class="primary-btn" id="runTerminalProbe">运行探针</button>
+                </div>
+              </div>
+              <div class="general-sections">
+                <section class="general-section">
+                  <h3>运行状态</h3>
+                  <div class="terminal-summary-grid">
+                    <div class="mcp-stat"><span>命令工具</span><strong id="terminalRunCommand">-</strong></div>
+                    <div class="mcp-stat"><span>命令审批</span><strong id="terminalApproval">-</strong></div>
+                    <div class="mcp-stat"><span>超时</span><strong id="terminalTimeout">0s</strong></div>
+                    <div class="mcp-stat"><span>输出限制</span><strong id="terminalOutputLimit">0</strong></div>
+                  </div>
+                </section>
+                <section class="general-section">
+                  <h3>终端信息</h3>
+                  <div class="terminal-meta-grid">
+                    <div class="setting-card"><div class="setting-name">工作目录</div><div class="mcp-config-path" id="terminalWorkdir">-</div></div>
+                    <div class="setting-card"><div class="setting-name">Shell</div><div class="mcp-config-path" id="terminalShell">-</div></div>
+                  </div>
+                  <div class="settings-result" id="terminalResult"></div>
+                </section>
+                <section class="general-section">
+                  <h3>探针输出</h3>
+                  <div class="terminal-console">
+                    <div class="terminal-console-head">
+                      <div class="terminal-lights"><span></span><span></span><span></span></div>
+                      <div class="terminal-console-title" id="terminalConsoleTitle">cat-agentic terminal probe</div>
+                    </div>
+                    <pre class="terminal-output" id="terminalOutput">点击“运行探针”读取当前工作目录、Shell 和 Git 状态。</pre>
+                  </div>
+                </section>
               </div>
             </div>
             <div class="settings-panel" id="mcpSettingsPanel">
@@ -2822,6 +2944,7 @@ def render_desktop_html() -> str:
       renderProviderState(state);
       renderGeneralSettings(state);
       renderH5Settings(state);
+      renderTerminalSettings(state.terminalSettings || {}, state.terminalProbe);
       renderMcpSettings(state.mcpSettings || {});
       renderAgentsSettings(state.agentsSettings || {});
       renderSkillsSettings(state.skillsSettings || {});
@@ -3022,6 +3145,60 @@ def render_desktop_html() -> str:
       } finally {
         button.disabled = false;
         button.textContent = '保存 H5 设置';
+      }
+    }
+    function renderTerminalSettings(terminal, probe) {
+      $('terminalRunCommand').textContent = terminal.runCommandEnabled ? '可用' : '不可用';
+      $('terminalApproval').textContent = terminal.approvalRequired ? '开启' : '关闭';
+      $('terminalTimeout').textContent = `${terminal.commandTimeoutSeconds || 0}s`;
+      $('terminalOutputLimit').textContent = formatCompactNumber(terminal.maxOutputChars || 0);
+      $('terminalWorkdir').textContent = terminal.workdir || '-';
+      $('terminalShell').textContent = terminal.shell || '-';
+      const result = $('terminalResult');
+      if (terminal.ok === false) {
+        result.textContent = `终端状态读取失败：${terminal.error || '未知错误'}`;
+        result.classList.add('bad');
+        result.classList.remove('ok');
+      } else {
+        const writable = terminal.writable ? '工作目录可写' : '工作目录只读';
+        const tools = (terminal.tools || []).join(', ');
+        result.textContent = `${writable}。可用工具：${tools || '无'}`;
+        result.classList.add('ok');
+        result.classList.remove('bad');
+      }
+      if (probe) renderTerminalProbe(probe);
+    }
+    function renderTerminalProbe(probe) {
+      $('terminalConsoleTitle').textContent = probe.ok ? 'terminal probe passed' : 'terminal probe failed';
+      $('terminalOutput').textContent = probe.output || probe.message || '没有输出。';
+      const result = $('terminalResult');
+      result.textContent = probe.message || '';
+      result.classList.toggle('ok', !!probe.ok);
+      result.classList.toggle('bad', !probe.ok);
+    }
+    async function refreshTerminalSettings() {
+      const button = $('refreshTerminalSettings');
+      button.disabled = true;
+      button.textContent = '刷新中...';
+      try {
+        renderTerminalSettings(await api('/api/terminal'));
+      } finally {
+        button.disabled = false;
+        button.textContent = '刷新';
+      }
+    }
+    async function runTerminalProbe() {
+      const button = $('runTerminalProbe');
+      button.disabled = true;
+      button.textContent = '运行中...';
+      $('terminalConsoleTitle').textContent = 'terminal probe running';
+      $('terminalOutput').textContent = '正在运行只读探针...';
+      try {
+        const state = await api('/api/terminal/probe', {});
+        render(state);
+      } finally {
+        button.disabled = false;
+        button.textContent = '运行探针';
       }
     }
     function renderMcpSettings(mcp) {
@@ -3551,6 +3728,7 @@ def render_desktop_html() -> str:
         $('providerSettingsPanel').classList.toggle('active', view === 'provider');
         $('generalSettingsPanel').classList.toggle('active', view === 'general');
         $('h5SettingsPanel').classList.toggle('active', view === 'h5');
+        $('terminalSettingsPanel').classList.toggle('active', view === 'terminal');
         $('mcpSettingsPanel').classList.toggle('active', view === 'mcp');
         $('agentsSettingsPanel').classList.toggle('active', view === 'agents');
         $('skillsSettingsPanel').classList.toggle('active', view === 'skills');
@@ -3569,6 +3747,8 @@ def render_desktop_html() -> str:
     });
     $('saveGeneralSettings').onclick = saveGeneralSettings;
     $('saveH5Settings').onclick = saveH5Settings;
+    $('refreshTerminalSettings').onclick = refreshTerminalSettings;
+    $('runTerminalProbe').onclick = runTerminalProbe;
     $('refreshMcpSettings').onclick = refreshMcpSettings;
     $('refreshAgentsSettings').onclick = refreshAgentsSettings;
     $('refreshSkillsSettings').onclick = refreshSkillsSettings;
