@@ -73,10 +73,13 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "/api/settings/h5" in html
     assert "/api/mcp" in html
     assert "/api/skills" in html
+    assert "/api/memory" in html
+    assert "/api/memory/preview" in html
     assert 'data-settings-view="general"' in html
     assert 'data-settings-view="h5"' in html
     assert 'data-settings-view="mcp"' in html
     assert 'data-settings-view="skills"' in html
+    assert 'data-settings-view="memory"' in html
     assert 'id="h5SettingsPanel"' in html
     assert 'id="saveH5Settings"' in html
     assert "保存 H5 设置" in html
@@ -87,6 +90,10 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert 'id="refreshSkillsSettings"' in html
     assert 'id="skillsSearch"' in html
     assert "技能目录" in html
+    assert 'id="memorySettingsPanel"' in html
+    assert 'id="refreshMemorySettings"' in html
+    assert 'id="memorySearch"' in html
+    assert "记忆来源" in html
     assert 'id="requireCommandApproval"' in html
     assert 'id="notificationsEnabled"' in html
     assert 'id="uiScale"' in html
@@ -976,6 +983,51 @@ def test_desktop_skills_settings_read_local_skill_summaries(tmp_path: Path) -> N
     assert skills["skills"][0]["description"] == "Review code changes for regressions."
     assert skills["skills"][0]["relativePath"] == "coding/review.md"
     assert "full body should not be returned" not in json.dumps(skills)
+
+
+def test_desktop_memory_settings_read_local_memory_summaries(tmp_path: Path) -> None:
+    workdir = tmp_path / "project"
+    workdir.mkdir()
+    (workdir / "MEMORY.md").write_text(
+        "\n".join(
+            [
+                "# Project Memory",
+                "",
+                "Public project summary.",
+                "Private implementation detail should only appear in preview.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config_dir = tmp_path / "config"
+    memory_dir = config_dir / "memory"
+    memory_dir.mkdir(parents=True)
+    (memory_dir / "user-memory.md").write_text(
+        "# User Memory\n\nPublic user summary.\n",
+        encoding="utf-8",
+    )
+    config = RuntimeConfig(
+        config_file=config_dir / "config.json",
+        workdir=workdir,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+
+    memory = app.state()["memorySettings"]
+
+    assert memory["ok"] is True
+    assert memory["total"] == 2
+    assert memory["project"] == 1
+    assert memory["user"] == 1
+    assert {item["title"] for item in memory["items"]} == {"Project Memory", "User Memory"}
+    assert "Private implementation detail" not in json.dumps(memory)
+    project_item = next(item for item in memory["items"] if item["source"] == "项目")
+    preview = app.memory_preview(project_item["id"])
+    assert preview["ok"] is True
+    assert "Private implementation detail should only appear in preview." in preview["content"]
 
 
 def test_desktop_provider_connection_error_redacts_secret(

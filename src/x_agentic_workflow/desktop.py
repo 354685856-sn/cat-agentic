@@ -15,6 +15,7 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any, cast
+from urllib.parse import parse_qs, urlparse
 
 from .agent import Agent
 from .config import ProviderConfig, RuntimeConfig
@@ -32,6 +33,8 @@ MAX_ATTACHMENT_FILES = 5
 MAX_ATTACHMENT_BYTES = 128 * 1024
 MAX_ATTACHMENT_TOTAL_BYTES = 256 * 1024
 SCHEDULER_INTERVAL_SECONDS = 30
+MEMORY_PREVIEW_CHARS = 12_000
+MEMORY_SCAN_LIMIT = 120
 
 
 def run_desktop(
@@ -139,6 +142,7 @@ class DesktopApp:
             "h5Access": self._h5_access_state(),
             "mcpSettings": self._mcp_settings_state(),
             "skillsSettings": self._skills_settings_state(),
+            "memorySettings": self._memory_settings_state(),
             "generalSettings": {
                 "requireCommandApproval": self.config.require_command_approval,
                 "sendMode": self.config.desktop_send_mode,
@@ -895,21 +899,67 @@ class DesktopApp:
             "estimatedChars": estimated_chars,
         }
 
+    def _memory_settings_state(self) -> dict[str, Any]:
+        try:
+            items = _memory_entries(self.config)
+        except OSError as exc:
+            return {
+                "ok": False,
+                "error": str(exc),
+                "roots": _memory_roots(self.config),
+                "items": [],
+                "total": 0,
+                "project": 0,
+                "user": 0,
+                "estimatedChars": 0,
+            }
+        return {
+            "ok": True,
+            "error": "",
+            "roots": _memory_roots(self.config),
+            "items": items,
+            "total": len(items),
+            "project": sum(1 for item in items if item["source"] == "项目"),
+            "user": sum(1 for item in items if item["source"] == "用户"),
+            "estimatedChars": sum(int(item["sizeBytes"]) for item in items),
+        }
+
+    def memory_preview(self, memory_id: str) -> dict[str, Any]:
+        for item in _memory_entries(self.config):
+            if item["id"] != memory_id:
+                continue
+            path = Path(str(item["path"]))
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace")
+            except OSError as exc:
+                return {"ok": False, "message": str(exc), "item": item, "content": ""}
+            truncated = len(content) > MEMORY_PREVIEW_CHARS
+            return {
+                "ok": True,
+                "message": "记忆文件已读取。",
+                "item": item,
+                "content": content[:MEMORY_PREVIEW_CHARS],
+                "truncated": truncated,
+            }
+        return {"ok": False, "message": "未找到这个记忆文件。", "item": None, "content": ""}
+
 
 def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
     class DesktopHandler(BaseHTTPRequestHandler):
         def do_GET(self) -> None:  # noqa: N802 - stdlib callback name
-            if self.path in {"/", "/index.html"}:
+            parsed = urlparse(self.path)
+            request_path = parsed.path
+            if request_path in {"/", "/index.html"}:
                 self._send_html(render_desktop_html())
                 return
-            if self.path == "/favicon.ico":
+            if request_path == "/favicon.ico":
                 self.send_response(HTTPStatus.NO_CONTENT)
                 self.end_headers()
                 return
-            if self.path == "/api/state":
+            if request_path == "/api/state":
                 self._send_json(app.state())
                 return
-            if self.path == "/api/scheduled":
+            if request_path == "/api/scheduled":
                 state = app.state()
                 self._send_json(
                     {
@@ -918,11 +968,18 @@ def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
                     }
                 )
                 return
-            if self.path == "/api/mcp":
+            if request_path == "/api/mcp":
                 self._send_json(app.state()["mcpSettings"])
                 return
-            if self.path == "/api/skills":
+            if request_path == "/api/skills":
                 self._send_json(app.state()["skillsSettings"])
+                return
+            if request_path == "/api/memory":
+                self._send_json(app.state()["memorySettings"])
+                return
+            if request_path == "/api/memory/preview":
+                memory_id = parse_qs(parsed.query).get("id", [""])[0]
+                self._send_json(app.memory_preview(memory_id))
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -1142,6 +1199,106 @@ def _project_sessions_dir(base_dir: Path, workdir: Path) -> Path:
     digest = hashlib.sha256(resolved.encode("utf-8")).hexdigest()[:12]
     slug = re.sub(r"[^A-Za-z0-9_.-]+", "-", workdir.name).strip(".-") or "project"
     return base_dir / "projects" / f"{slug}-{digest}"
+
+
+def _memory_roots(config: RuntimeConfig) -> list[str]:
+    return [
+        str(config.workdir),
+        str(config.config_file.parent / "memory"),
+        str(config.config_file.parent / "memories"),
+    ]
+
+
+def _memory_entries(config: RuntimeConfig) -> list[dict[str, Any]]:
+    candidates: dict[Path, str] = {}
+    workdir = config.workdir.resolve()
+    config_dir = config.config_file.parent.resolve()
+
+    for path in [
+        workdir / "MEMORY.md",
+        workdir / "memory.md",
+        workdir / ".cat-agentic" / "MEMORY.md",
+    ]:
+        if path.is_file():
+            candidates[path.resolve()] = "项目"
+
+    for root in [workdir / ".cat-agentic" / "memory", config_dir / "memory", config_dir / "memories"]:
+        if root.is_dir():
+            for path in sorted(root.rglob("*.md"))[:MEMORY_SCAN_LIMIT]:
+                if _is_memory_scan_path(path):
+                    candidates[path.resolve()] = "项目" if _is_relative_to(path.resolve(), workdir) else "用户"
+
+    if workdir.is_dir():
+        found = 0
+        for path in sorted(workdir.rglob("*.md")):
+            if found >= MEMORY_SCAN_LIMIT:
+                break
+            if not _is_memory_scan_path(path):
+                continue
+            resolved = path.resolve()
+            name = resolved.name.lower()
+            if name in {"memory.md", "memories.md"} or "memory" in name:
+                candidates[resolved] = "项目"
+                found += 1
+
+    items = []
+    seen_files: set[tuple[int, int]] = set()
+    for path, source in sorted(candidates.items(), key=lambda entry: (entry[1], str(entry[0]))):
+        try:
+            stat = path.stat()
+            sample = path.read_text(encoding="utf-8", errors="replace")[:4_000]
+        except OSError:
+            continue
+        file_key = (stat.st_dev, stat.st_ino)
+        if file_key in seen_files:
+            continue
+        seen_files.add(file_key)
+        base = workdir if source == "项目" else config_dir
+        relative_path = str(path.relative_to(base)) if _is_relative_to(path, base) else path.name
+        items.append(
+            {
+                "id": hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:16],
+                "title": _memory_title(path, sample),
+                "summary": _memory_summary(sample),
+                "source": source,
+                "path": str(path),
+                "relativePath": relative_path,
+                "sizeBytes": stat.st_size,
+                "updated": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M"),
+            }
+        )
+    return items[:MEMORY_SCAN_LIMIT]
+
+
+def _is_memory_scan_path(path: Path) -> bool:
+    blocked = {".git", ".venv", "venv", "node_modules", "__pycache__", "dist", "build"}
+    return not any(part in blocked for part in path.parts)
+
+
+def _is_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _memory_title(path: Path, sample: str) -> str:
+    for line in sample.splitlines()[:40]:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return stripped.lstrip("#").strip() or path.stem
+    return path.stem
+
+
+def _memory_summary(sample: str, limit: int = 180) -> str:
+    for line in sample.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("---") or stripped.startswith("#"):
+            continue
+        compact = " ".join(stripped.split())
+        return compact[:limit]
+    return "暂无摘要。"
 
 
 def _workspace_status(workdir: Path) -> dict[str, Any]:
@@ -1742,6 +1899,28 @@ def render_desktop_html() -> str:
     .skill-description { color: #536172; font-size: 14px; line-height: 1.5; }
     .skill-meta { color: #7a8798; font-size: 13px; line-height: 1.45; word-break: break-word; }
     .skill-empty { border: 1px dashed #d8e0ea; border-radius: 8px; color: #7a8798; padding: 22px; background: #fbfcfe; }
+    .memory-browser { display: grid; grid-template-columns: minmax(260px, 360px) minmax(0, 1fr); gap: 14px; align-items: start; }
+    .memory-list { display: grid; gap: 10px; max-height: 560px; overflow: auto; }
+    .memory-card {
+      width: 100%; text-align: left; border: 1px solid #dfe6ef; border-radius: 8px; background: white;
+      padding: 14px 16px; display: grid; gap: 7px; cursor: pointer; font: inherit;
+    }
+    .memory-card:hover, .memory-card.active { border-color: #b56049; background: #fffaf8; }
+    .memory-title { color: #202633; font-size: 16px; font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .memory-summary { color: #536172; font-size: 13px; line-height: 1.45; }
+    .memory-meta { color: #7a8798; font-size: 12px; line-height: 1.4; word-break: break-word; }
+    .memory-preview {
+      border: 1px solid #dfe6ef; border-radius: 8px; background: #fbfcfe; min-height: 360px;
+      display: grid; grid-template-rows: auto 1fr;
+    }
+    .memory-preview-head { border-bottom: 1px solid #e8eef5; padding: 16px 18px; display: grid; gap: 6px; }
+    .memory-preview-title { color: #202633; font-size: 18px; font-weight: 820; }
+    .memory-preview-path { color: #7a8798; font-size: 13px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .memory-content {
+      margin: 0; padding: 18px; overflow: auto; white-space: pre-wrap; word-break: break-word;
+      color: #2c3440; font-size: 14px; line-height: 1.55; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .memory-empty { border: 1px dashed #d8e0ea; border-radius: 8px; color: #7a8798; padding: 22px; background: #fbfcfe; }
     .setting-card {
       border: 1px solid #dfe6ef; border-radius: 8px; padding: 16px 18px; background: #fbfcfe;
       display: grid; gap: 12px;
@@ -2199,7 +2378,7 @@ def render_desktop_html() -> str:
               <button data-settings-view="mcp"><span>▤</span><span class="settings-nav-label">MCP</span></button>
               <button class="pending" disabled><span>▦</span><span class="settings-nav-label">Agents</span><span class="settings-nav-status">后续</span></button>
               <button data-settings-view="skills"><span>✦</span><span class="settings-nav-label">技能</span></button>
-              <button class="pending" disabled><span>▧</span><span class="settings-nav-label">记忆</span><span class="settings-nav-status">后续</span></button>
+              <button data-settings-view="memory"><span>▧</span><span class="settings-nav-label">记忆</span></button>
               <button class="pending" disabled><span>⌘</span><span class="settings-nav-label">插件</span><span class="settings-nav-status">后续</span></button>
               <button class="pending" disabled><span>◉</span><span class="settings-nav-label">Computer Use</span><span class="settings-nav-status">后续</span></button>
               <button class="pending" disabled><span>▥</span><span class="settings-nav-label">Token 用量</span><span class="settings-nav-status">后续</span></button>
@@ -2417,6 +2596,51 @@ def render_desktop_html() -> str:
                 </section>
               </div>
             </div>
+            <div class="settings-panel" id="memorySettingsPanel">
+              <div class="settings-head">
+                <div>
+                  <div class="settings-title">记忆</div>
+                  <div class="settings-subtitle">浏览项目和本机配置目录中的 Markdown 记忆文件。</div>
+                </div>
+                <button class="secondary-btn" id="refreshMemorySettings">刷新</button>
+              </div>
+              <div class="general-sections">
+                <section class="general-section">
+                  <h3>记忆来源</h3>
+                  <p>当前版本只读取本机文件，不同步远程，也不把记忆内容自动发送给模型。</p>
+                  <div class="setting-card">
+                    <div class="mcp-config-path" id="memoryRoots">-</div>
+                    <div class="settings-result" id="memoryResult"></div>
+                  </div>
+                </section>
+                <section class="general-section">
+                  <h3>记忆概览</h3>
+                  <div class="skills-summary-grid">
+                    <div class="mcp-stat"><span>文件总数</span><strong id="memoryTotal">0</strong></div>
+                    <div class="mcp-stat"><span>项目记忆</span><strong id="memoryProject">0</strong></div>
+                    <div class="mcp-stat"><span>用户记忆</span><strong id="memoryUser">0</strong></div>
+                    <div class="mcp-stat"><span>约大小</span><strong id="memoryChars">0</strong></div>
+                  </div>
+                </section>
+                <section class="general-section">
+                  <h3>记忆浏览器</h3>
+                  <div class="skills-toolbar">
+                    <input class="skills-search" id="memorySearch" placeholder="搜索记忆标题、摘要或路径..." />
+                    <span class="badge" id="memoryFilterCount">0</span>
+                  </div>
+                  <div class="memory-browser">
+                    <div class="memory-list" id="memoryList"></div>
+                    <div class="memory-preview">
+                      <div class="memory-preview-head">
+                        <div class="memory-preview-title" id="memoryPreviewTitle">选择一个记忆文件</div>
+                        <div class="memory-preview-path" id="memoryPreviewPath">只会读取预览片段。</div>
+                      </div>
+                      <pre class="memory-content" id="memoryPreviewContent">暂无预览。</pre>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </div>
           </div>
         </div>
         <div class="screen" id="scheduledScreen">
@@ -2496,6 +2720,8 @@ def render_desktop_html() -> str:
     let currentDraftKey = '';
     let desktopSendMode = 'modifier-enter';
     let desktopNotificationsEnabled = false;
+    let latestMemoryItems = [];
+    let selectedMemoryId = '';
     async function api(path, body) {
       const res = await fetch(path, { method: body ? 'POST' : 'GET', headers: {'content-type': 'application/json'}, body: body ? JSON.stringify(body) : undefined });
       return await res.json();
@@ -2525,6 +2751,7 @@ def render_desktop_html() -> str:
       renderH5Settings(state);
       renderMcpSettings(state.mcpSettings || {});
       renderSkillsSettings(state.skillsSettings || {});
+      renderMemorySettings(state.memorySettings || {});
       if (state.providerSave) showProviderResult(state.providerSave);
       if (state.providerTest) showProviderResult(state.providerTest);
       if (state.generalSave) showGeneralResult(state.generalSave);
@@ -2822,6 +3049,88 @@ def render_desktop_html() -> str:
       button.textContent = '刷新中...';
       try {
         renderSkillsSettings(await api('/api/skills'));
+      } finally {
+        button.disabled = false;
+        button.textContent = '刷新';
+      }
+    }
+    function renderMemorySettings(memoryState) {
+      latestMemoryItems = memoryState.items || [];
+      $('memoryRoots').textContent = (memoryState.roots || []).join(' · ') || '-';
+      $('memoryTotal').textContent = String(memoryState.total || 0);
+      $('memoryProject').textContent = String(memoryState.project || 0);
+      $('memoryUser').textContent = String(memoryState.user || 0);
+      $('memoryChars').textContent = formatCompactNumber(memoryState.estimatedChars || 0);
+      const result = $('memoryResult');
+      if (memoryState.ok === false) {
+        result.textContent = `记忆读取失败：${memoryState.error || '未知错误'}`;
+        result.classList.add('bad');
+        result.classList.remove('ok');
+      } else {
+        result.textContent = '本机记忆索引已读取。列表只展示摘要，点选后读取预览。';
+        result.classList.add('ok');
+        result.classList.remove('bad');
+      }
+      renderMemoryList();
+    }
+    function renderMemoryList() {
+      const query = ($('memorySearch').value || '').trim().toLowerCase();
+      const filtered = latestMemoryItems.filter(item => {
+        const text = [item.title, item.summary, item.relativePath, item.source].join(' ').toLowerCase();
+        return !query || text.includes(query);
+      });
+      $('memoryFilterCount').textContent = `${filtered.length}/${latestMemoryItems.length}`;
+      const list = $('memoryList');
+      if (!filtered.length) {
+        list.innerHTML = '<div class="memory-empty">暂无匹配记忆。</div>';
+        if (!selectedMemoryId) {
+          $('memoryPreviewTitle').textContent = '选择一个记忆文件';
+          $('memoryPreviewPath').textContent = '只会读取预览片段。';
+          $('memoryPreviewContent').textContent = '暂无预览。';
+        }
+        return;
+      }
+      if (!selectedMemoryId || !filtered.some(item => item.id === selectedMemoryId)) selectedMemoryId = filtered[0].id;
+      list.innerHTML = filtered.map(item => {
+        const active = item.id === selectedMemoryId ? ' active' : '';
+        const meta = `${item.relativePath || item.path || ''} · ${item.updated || '未知时间'} · ${formatCompactNumber(item.sizeBytes || 0)}B`;
+        return `<button class="memory-card${active}" data-memory-id="${escapeHtml(item.id)}">
+          <div class="skill-head"><div class="memory-title">${escapeHtml(item.title || '未命名记忆')}</div><span class="badge">${escapeHtml(item.source || '本机')}</span></div>
+          <div class="memory-summary">${escapeHtml(item.summary || '暂无摘要。')}</div>
+          <div class="memory-meta">${escapeHtml(meta)}</div>
+        </button>`;
+      }).join('');
+      document.querySelectorAll('[data-memory-id]').forEach(button => {
+        button.onclick = async () => selectMemory(button.dataset.memoryId || '');
+      });
+    }
+    async function selectMemory(memoryId) {
+      if (!memoryId) return;
+      selectedMemoryId = memoryId;
+      document.querySelectorAll('[data-memory-id]').forEach(button => {
+        button.classList.toggle('active', button.dataset.memoryId === memoryId);
+      });
+      $('memoryPreviewTitle').textContent = '读取中...';
+      $('memoryPreviewContent').textContent = '';
+      const preview = await api(`/api/memory/preview?id=${encodeURIComponent(memoryId)}`);
+      if (!preview.ok) {
+        $('memoryPreviewTitle').textContent = '读取失败';
+        $('memoryPreviewPath').textContent = preview.message || '未知错误';
+        $('memoryPreviewContent').textContent = '';
+        return;
+      }
+      const item = preview.item || {};
+      $('memoryPreviewTitle').textContent = item.title || '未命名记忆';
+      $('memoryPreviewPath').textContent = item.relativePath || item.path || '';
+      $('memoryPreviewContent').textContent = preview.truncated ? `${preview.content}\n\n... 预览已截断` : (preview.content || '空文件。');
+    }
+    async function refreshMemorySettings() {
+      const button = $('refreshMemorySettings');
+      button.disabled = true;
+      button.textContent = '刷新中...';
+      try {
+        selectedMemoryId = '';
+        renderMemorySettings(await api('/api/memory'));
       } finally {
         button.disabled = false;
         button.textContent = '刷新';
@@ -3129,6 +3438,8 @@ def render_desktop_html() -> str:
         $('h5SettingsPanel').classList.toggle('active', view === 'h5');
         $('mcpSettingsPanel').classList.toggle('active', view === 'mcp');
         $('skillsSettingsPanel').classList.toggle('active', view === 'skills');
+        $('memorySettingsPanel').classList.toggle('active', view === 'memory');
+        if (view === 'memory' && selectedMemoryId) selectMemory(selectedMemoryId);
       };
     });
     document.querySelectorAll('[data-send-mode]').forEach(button => {
@@ -3144,10 +3455,12 @@ def render_desktop_html() -> str:
     $('saveH5Settings').onclick = saveH5Settings;
     $('refreshMcpSettings').onclick = refreshMcpSettings;
     $('refreshSkillsSettings').onclick = refreshSkillsSettings;
+    $('refreshMemorySettings').onclick = refreshMemorySettings;
     $('skillsSearch').addEventListener('input', async () => {
       const state = await api('/api/skills');
       renderSkillsSettings(state);
     });
+    $('memorySearch').addEventListener('input', renderMemoryList);
     async function switchProject(path) {
       const target = (path || $('projectPathInput').value).trim();
       const button = $('switchProject');
