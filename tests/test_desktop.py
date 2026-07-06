@@ -71,11 +71,16 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "/api/scheduled/delete" in html
     assert "/api/settings/general" in html
     assert "/api/settings/h5" in html
+    assert "/api/mcp" in html
     assert 'data-settings-view="general"' in html
     assert 'data-settings-view="h5"' in html
+    assert 'data-settings-view="mcp"' in html
     assert 'id="h5SettingsPanel"' in html
     assert 'id="saveH5Settings"' in html
     assert "保存 H5 设置" in html
+    assert 'id="mcpSettingsPanel"' in html
+    assert 'id="refreshMcpSettings"' in html
+    assert "MCP 配置文件" in html
     assert 'id="requireCommandApproval"' in html
     assert 'id="notificationsEnabled"' in html
     assert 'id="uiScale"' in html
@@ -865,6 +870,68 @@ def test_desktop_h5_settings_reject_invalid_payload(tmp_path: Path) -> None:
 
     assert invalid_port["h5Save"]["ok"] is False
     assert invalid_keepalive["h5Save"]["ok"] is False
+
+
+def test_desktop_mcp_settings_read_config_without_secret_values(tmp_path: Path) -> None:
+    mcp_config = tmp_path / "mcp.json"
+    mcp_config.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "context7": {
+                        "command": "npx",
+                        "args": ["-y", "@upstash/context7-mcp"],
+                        "env": {"CONTEXT7_API_KEY": "secret-value"},
+                    },
+                    "remote-search": {
+                        "transport": "streamable-http",
+                        "url": "https://example.com/mcp",
+                    },
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=mcp_config,
+    )
+    app = DesktopApp(config)
+
+    mcp = app.state()["mcpSettings"]
+
+    assert mcp["ok"] is True
+    assert mcp["exists"] is True
+    assert mcp["total"] == 2
+    assert mcp["stdio"] == 1
+    assert mcp["remote"] == 1
+    assert mcp["servers"][0]["name"] == "context7"
+    assert mcp["servers"][0]["envKeys"] == ["CONTEXT7_API_KEY"]
+    assert "secret-value" not in json.dumps(mcp)
+
+
+def test_desktop_mcp_settings_reports_invalid_config(tmp_path: Path) -> None:
+    mcp_config = tmp_path / "mcp.json"
+    mcp_config.write_text("{not-json", encoding="utf-8")
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=mcp_config,
+    )
+    app = DesktopApp(config)
+
+    mcp = app.state()["mcpSettings"]
+
+    assert mcp["ok"] is False
+    assert mcp["exists"] is True
+    assert mcp["servers"] == []
 
 
 def test_desktop_provider_connection_error_redacts_secret(

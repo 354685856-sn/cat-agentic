@@ -18,6 +18,7 @@ from typing import Any, cast
 
 from .agent import Agent
 from .config import ProviderConfig, RuntimeConfig
+from .mcp import McpRegistry
 from .sessions import SessionStore
 from .types import AgentEvent, Message
 
@@ -135,6 +136,7 @@ class DesktopApp:
             "scheduledSummary": self._scheduled_summary(),
             "workspaceStatus": _workspace_status(self.config.workdir),
             "h5Access": self._h5_access_state(),
+            "mcpSettings": self._mcp_settings_state(),
             "generalSettings": {
                 "requireCommandApproval": self.config.require_command_approval,
                 "sendMode": self.config.desktop_send_mode,
@@ -801,6 +803,44 @@ class DesktopApp:
             ),
         }
 
+    def _mcp_settings_state(self) -> dict[str, Any]:
+        registry = McpRegistry(self.config.mcp_config_file)
+        try:
+            servers = registry.list_servers()
+        except (json.JSONDecodeError, OSError, TypeError) as exc:
+            return {
+                "configFile": str(self.config.mcp_config_file),
+                "exists": self.config.mcp_config_file.exists(),
+                "ok": False,
+                "error": str(exc),
+                "servers": [],
+                "total": 0,
+                "stdio": 0,
+                "remote": 0,
+            }
+        items = [
+            {
+                "name": server.name,
+                "command": server.command,
+                "args": server.args,
+                "transport": server.transport,
+                "url": server.url,
+                "envKeys": server.env_keys or [],
+            }
+            for server in servers
+        ]
+        remote = sum(1 for server in servers if server.url)
+        return {
+            "configFile": str(self.config.mcp_config_file),
+            "exists": self.config.mcp_config_file.exists(),
+            "ok": True,
+            "error": "",
+            "servers": items,
+            "total": len(items),
+            "stdio": len(items) - remote,
+            "remote": remote,
+        }
+
 
 def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
     class DesktopHandler(BaseHTTPRequestHandler):
@@ -819,6 +859,9 @@ def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
                         "scheduledSummary": state["scheduledSummary"],
                     }
                 )
+                return
+            if self.path == "/api/mcp":
+                self._send_json(app.state()["mcpSettings"])
                 return
             self.send_error(HTTPStatus.NOT_FOUND)
 
@@ -1611,6 +1654,20 @@ def render_desktop_html() -> str:
       padding: 12px 14px; color: #2f5f8f; background: white; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
+    .mcp-summary-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+    .mcp-stat { border: 1px solid #dfe6ef; border-radius: 8px; background: #fbfcfe; padding: 16px 18px; }
+    .mcp-stat span { display: block; color: #7a8798; font-size: 13px; font-weight: 760; }
+    .mcp-stat strong { display: block; color: #202633; font-size: 30px; margin-top: 8px; }
+    .mcp-config-path {
+      border: 1px solid #dfe6ef; border-radius: 8px; padding: 12px 14px; background: white;
+      color: #536172; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .mcp-list { display: grid; gap: 10px; }
+    .mcp-server-card { border: 1px solid #dfe6ef; border-radius: 8px; background: white; padding: 15px 18px; display: grid; gap: 8px; }
+    .mcp-server-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
+    .mcp-server-name { color: #202633; font-size: 18px; font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .mcp-server-meta { color: #7a8798; font-size: 14px; line-height: 1.45; word-break: break-word; }
+    .mcp-empty { border: 1px dashed #d8e0ea; border-radius: 8px; color: #7a8798; padding: 22px; background: #fbfcfe; }
     .setting-card {
       border: 1px solid #dfe6ef; border-radius: 8px; padding: 16px 18px; background: #fbfcfe;
       display: grid; gap: 12px;
@@ -2065,7 +2122,7 @@ def render_desktop_html() -> str:
               <button data-settings-view="h5"><span>⌗</span><span class="settings-nav-label">H5 访问</span></button>
               <button class="pending" disabled><span>▰</span><span class="settings-nav-label">IM 接入</span><span class="settings-nav-status">后续</span></button>
               <button class="pending" disabled><span>▣</span><span class="settings-nav-label">终端</span><span class="settings-nav-status">后续</span></button>
-              <button class="pending" disabled><span>▤</span><span class="settings-nav-label">MCP</span><span class="settings-nav-status">后续</span></button>
+              <button data-settings-view="mcp"><span>▤</span><span class="settings-nav-label">MCP</span></button>
               <button class="pending" disabled><span>▦</span><span class="settings-nav-label">Agents</span><span class="settings-nav-status">后续</span></button>
               <button class="pending" disabled><span>✦</span><span class="settings-nav-label">技能</span><span class="settings-nav-status">后续</span></button>
               <button class="pending" disabled><span>▧</span><span class="settings-nav-label">记忆</span><span class="settings-nav-status">后续</span></button>
@@ -2219,6 +2276,37 @@ def render_desktop_html() -> str:
                 </div>
               </div>
             </div>
+            <div class="settings-panel" id="mcpSettingsPanel">
+              <div class="settings-head">
+                <div>
+                  <div class="settings-title">MCP</div>
+                  <div class="settings-subtitle">读取本机 MCP 配置，展示当前会注入到 Agent 上下文的服务定义。</div>
+                </div>
+                <button class="secondary-btn" id="refreshMcpSettings">刷新</button>
+              </div>
+              <div class="general-sections">
+                <section class="general-section">
+                  <h3>MCP 配置文件</h3>
+                  <p>当前版本只读取和展示配置，不启动外部 MCP 进程，也不写入密钥值。</p>
+                  <div class="setting-card">
+                    <div class="mcp-config-path" id="mcpConfigFile">-</div>
+                    <div class="settings-result" id="mcpResult"></div>
+                  </div>
+                </section>
+                <section class="general-section">
+                  <h3>服务概览</h3>
+                  <div class="mcp-summary-grid">
+                    <div class="mcp-stat"><span>服务总数</span><strong id="mcpTotal">0</strong></div>
+                    <div class="mcp-stat"><span>STDIO</span><strong id="mcpStdio">0</strong></div>
+                    <div class="mcp-stat"><span>远程 URL</span><strong id="mcpRemote">0</strong></div>
+                  </div>
+                </section>
+                <section class="general-section">
+                  <h3>已配置服务</h3>
+                  <div class="mcp-list" id="mcpServerList"></div>
+                </section>
+              </div>
+            </div>
           </div>
         </div>
         <div class="screen" id="scheduledScreen">
@@ -2325,6 +2413,7 @@ def render_desktop_html() -> str:
       renderProviderState(state);
       renderGeneralSettings(state);
       renderH5Settings(state);
+      renderMcpSettings(state.mcpSettings || {});
       if (state.providerSave) showProviderResult(state.providerSave);
       if (state.providerTest) showProviderResult(state.providerTest);
       if (state.generalSave) showGeneralResult(state.generalSave);
@@ -2521,6 +2610,52 @@ def render_desktop_html() -> str:
       } finally {
         button.disabled = false;
         button.textContent = '保存 H5 设置';
+      }
+    }
+    function renderMcpSettings(mcp) {
+      $('mcpConfigFile').textContent = mcp.configFile || '-';
+      $('mcpTotal').textContent = String(mcp.total || 0);
+      $('mcpStdio').textContent = String(mcp.stdio || 0);
+      $('mcpRemote').textContent = String(mcp.remote || 0);
+      const result = $('mcpResult');
+      if (mcp.ok === false) {
+        result.textContent = `配置读取失败：${mcp.error || '未知错误'}`;
+        result.classList.add('bad');
+        result.classList.remove('ok');
+      } else if (mcp.exists) {
+        result.textContent = '配置已读取。环境变量只显示名称，不显示值。';
+        result.classList.add('ok');
+        result.classList.remove('bad');
+      } else {
+        result.textContent = '还没有 MCP 配置文件。当前 Agent 不会注入 MCP 服务。';
+        result.classList.remove('ok', 'bad');
+      }
+      const list = $('mcpServerList');
+      const servers = mcp.servers || [];
+      if (!servers.length) {
+        list.innerHTML = '<div class="mcp-empty">暂无已配置 MCP 服务。</div>';
+        return;
+      }
+      list.innerHTML = servers.map(server => {
+        const args = (server.args || []).join(' ');
+        const commandLine = server.url || [server.command, args].filter(Boolean).join(' ');
+        const envKeys = (server.envKeys || []).length ? `环境变量：${server.envKeys.join(', ')}` : '无环境变量声明';
+        return `<div class="mcp-server-card">
+          <div class="mcp-server-head"><div class="mcp-server-name">${escapeHtml(server.name || 'unnamed')}</div><span class="badge">${escapeHtml(server.transport || 'stdio')}</span></div>
+          <div class="mcp-server-meta">${escapeHtml(commandLine || '未配置启动命令')}</div>
+          <div class="mcp-server-meta">${escapeHtml(envKeys)}</div>
+        </div>`;
+      }).join('');
+    }
+    async function refreshMcpSettings() {
+      const button = $('refreshMcpSettings');
+      button.disabled = true;
+      button.textContent = '刷新中...';
+      try {
+        renderMcpSettings(await api('/api/mcp'));
+      } finally {
+        button.disabled = false;
+        button.textContent = '刷新';
       }
     }
     function showCompletionNotification(state) {
@@ -2823,6 +2958,7 @@ def render_desktop_html() -> str:
         $('providerSettingsPanel').classList.toggle('active', view === 'provider');
         $('generalSettingsPanel').classList.toggle('active', view === 'general');
         $('h5SettingsPanel').classList.toggle('active', view === 'h5');
+        $('mcpSettingsPanel').classList.toggle('active', view === 'mcp');
       };
     });
     document.querySelectorAll('[data-send-mode]').forEach(button => {
@@ -2836,6 +2972,7 @@ def render_desktop_html() -> str:
     });
     $('saveGeneralSettings').onclick = saveGeneralSettings;
     $('saveH5Settings').onclick = saveH5Settings;
+    $('refreshMcpSettings').onclick = refreshMcpSettings;
     async function switchProject(path) {
       const target = (path || $('projectPathInput').value).trim();
       const button = $('switchProject');
