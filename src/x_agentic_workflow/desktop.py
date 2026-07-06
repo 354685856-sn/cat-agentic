@@ -1789,8 +1789,8 @@ def render_desktop_html() -> str:
         <div class="sidebar-section">
           <div class="side-heading">项目</div>
           <div class="project-block">
-            <div class="project-header"><span class="project-icon folder-icon" aria-hidden="true"></span><span id="currentProjectName">x-agentic-workflow</span></div>
-            <div class="conversation-row active"><span class="conversation-title" id="currentProjectPath">354685856-sn/x-agentic-workflow</span><span class="shortcut">当前</span></div>
+            <div class="project-header"><span class="project-icon folder-icon" aria-hidden="true"></span><span id="currentProjectName">cat-agentic</span></div>
+            <div class="conversation-row active"><span class="conversation-title" id="currentProjectPath">354685856-sn/cat-agentic</span><span class="shortcut">当前</span></div>
             <div id="recents"><div class="conversation-row muted"><span class="conversation-title">暂无聊天</span></div></div>
           </div>
           <div class="project-block">
@@ -1809,7 +1809,7 @@ def render_desktop_html() -> str:
     <main>
       <div class="topbar">
         <div class="mode-tabs">
-          <span class="mode-tab-static" id="projectTopTab">x-agentic-workflow</span>
+          <span class="mode-tab-static" id="projectTopTab">cat-agentic</span>
           <button class="mode-tab" id="settingsTab">⚙ 设置</button>
           <button class="mode-tab active" id="chatTab">新建会话</button>
           <button class="mode-tab" id="scheduledTab">◷ 定时任务</button>
@@ -2372,7 +2372,7 @@ def render_desktop_html() -> str:
       render(await api('/api/state'));
     };
     $('githubBtn').onclick = () => {
-      window.open('https://github.com/354685856-sn/x-agentic-workflow', '_blank', 'noopener,noreferrer');
+      window.open('https://github.com/354685856-sn/cat-agentic', '_blank', 'noopener,noreferrer');
     };
     $('sidebarToggle').onclick = () => {
       document.querySelector('.app').classList.toggle('sidebar-collapsed');

@@ -27,7 +27,7 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
 
     assert "cat-agentic" in html
     assert "cat-agenic" not in html
-    assert "x-agentic-workflow" in html
+    assert "x-agentic-workflow" not in html
     assert "新建会话" in html
     assert "navSettings" not in html
     assert "已安排" not in html
@@ -36,7 +36,7 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "navSearch" not in html
     assert "navScheduled" not in html
     assert "navPlugins" not in html
-    assert "354685856-sn/x-agentic-workflow" in html
+    assert "354685856-sn/cat-agentic" in html
     assert "当前" in html
     assert "我的仓库位置" not in html
     assert "Claude-cc-haha" not in html

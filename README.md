@@ -186,51 +186,51 @@ desktop UI alignment, local scheduling, Git workspace status, and Worktree contr
 
 Version `0.15.0` is published on GitHub with scoped composer draft recovery:
 
-<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.15.0>
+<https://github.com/354685856-sn/cat-agentic/releases/tag/v0.15.0>
 
 Version `0.14.0` is published on GitHub with provider status and form reliability:
 
-<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.14.0>
+<https://github.com/354685856-sn/cat-agentic/releases/tag/v0.14.0>
 
 Version `0.13.0` is published on GitHub with safe desktop text attachments:
 
-<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.13.0>
+<https://github.com/354685856-sn/cat-agentic/releases/tag/v0.13.0>
 
 Version `0.12.0` is published on GitHub with desktop session recovery and filtering:
 
-<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.12.0>
+<https://github.com/354685856-sn/cat-agentic/releases/tag/v0.12.0>
 
 Version `0.11.1` is published on GitHub with desktop UI alignment:
 
-<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.11.1>
+<https://github.com/354685856-sn/cat-agentic/releases/tag/v0.11.1>
 
 Version `0.11.0` is published on GitHub with persisted desktop File Ledger:
 
-<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.11.0>
+<https://github.com/354685856-sn/cat-agentic/releases/tag/v0.11.0>
 
 Version `0.10.0` is published on GitHub with desktop File Ledger:
 
-<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.10.0>
+<https://github.com/354685856-sn/cat-agentic/releases/tag/v0.10.0>
 
 Version `0.9.0` is published on GitHub with desktop Project Sessions:
 
-<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.9.0>
+<https://github.com/354685856-sn/cat-agentic/releases/tag/v0.9.0>
 
 Version `0.8.0` is published on GitHub with desktop Project Switching:
 
-<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.8.0>
+<https://github.com/354685856-sn/cat-agentic/releases/tag/v0.8.0>
 
 Version `0.7.0` is published on GitHub with desktop Project Validation:
 
-<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.7.0>
+<https://github.com/354685856-sn/cat-agentic/releases/tag/v0.7.0>
 
 Version `0.6.0` is published on GitHub with desktop Provider Settings:
 
-<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.6.0>
+<https://github.com/354685856-sn/cat-agentic/releases/tag/v0.6.0>
 
 Version `0.5.0` is published on GitHub as a macOS preview distribution:
 
-<https://github.com/354685856-sn/x-agentic-workflow/releases/tag/v0.5.0>
+<https://github.com/354685856-sn/cat-agentic/releases/tag/v0.5.0>
 
 Version `0.2.0` is published to PyPI:
 
