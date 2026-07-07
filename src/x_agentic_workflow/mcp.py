@@ -20,6 +20,7 @@ class McpServer:
     transport: str = "stdio"
     url: str | None = None
     env_keys: list[str] | None = None
+    enabled: bool = True
 
 
 class McpRegistry:
@@ -47,6 +48,7 @@ class McpRegistry:
                     transport=str(spec.get("transport", spec.get("type", "stdio")) or "stdio"),
                     url=str(spec["url"]) if spec.get("url") else None,
                     env_keys=sorted(str(key) for key in env) if isinstance(env, dict) else [],
+                    enabled=bool(spec.get("enabled", True)),
                 )
             )
         return servers
@@ -56,10 +58,11 @@ class McpRegistry:
             servers = self.list_servers()
         except (json.JSONDecodeError, OSError, TypeError):
             return ""
-        if not servers:
+        enabled_servers = [server for server in servers if server.enabled]
+        if not enabled_servers:
             return ""
         lines = ["Configured MCP servers:"]
-        for server in servers:
+        for server in enabled_servers:
             if server.url:
                 lines.append(f"- {server.name}: {server.transport} {server.url}")
             else:

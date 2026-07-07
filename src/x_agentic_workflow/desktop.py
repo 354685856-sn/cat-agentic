@@ -40,6 +40,17 @@ MEMORY_SCAN_LIMIT = 120
 COMMAND_TIMEOUT_SECONDS = 120
 
 PROVIDER_PRESETS: dict[str, dict[str, Any]] = {
+    "openai": {
+        "displayName": "OpenAI",
+        "provider": "openai-compatible",
+        "protocolLabel": "OpenAI",
+        "model": "gpt-4.1",
+        "baseUrl": "https://api.openai.com/v1",
+        "apiKeyEnv": "OPENAI_API_KEY",
+        "authLabel": "Bearer Token (OPENAI_API_KEY)",
+        "note": "OpenAI 官方 Chat Completions 兼容端点。",
+        "toolSearchEnabled": True,
+    },
     "deepseek": {
         "displayName": "DeepSeek",
         "provider": "anthropic",
@@ -397,6 +408,59 @@ class DesktopApp:
             }
         return {**self.state(), "providerSave": {"ok": False, "message": "未找到这个服务商。"}}
 
+    def update_provider_profile(self, payload: dict[str, Any]) -> dict[str, Any]:
+        profile_id = str(payload.get("id", "")).strip()
+        if not profile_id:
+            return {**self.state(), "providerSave": {"ok": False, "message": "服务商 ID 不能为空。"}}
+        profiles = self._stored_provider_profiles()
+        old_profile = next((profile for profile in profiles if profile["id"] == profile_id), None)
+        if old_profile is None:
+            return {**self.state(), "providerSave": {"ok": False, "message": "未找到这个服务商。"}}
+        try:
+            profile = self._profile_from_payload(payload)
+        except ValueError as exc:
+            return {**self.state(), "providerSave": {"ok": False, "message": str(exc)}}
+        was_active = self._active_provider_id() == profile_id
+        profile["id"] = profile_id
+        normalized_profiles = [
+            profile if existing["id"] == profile_id else existing
+            for existing in profiles
+            if not str(existing["id"]).startswith("preset:")
+        ]
+        self.config.provider_profiles = normalized_profiles[:12]
+        if was_active:
+            self.config.provider.name = cast(Any, profile["provider"])
+            self.config.provider.model = str(profile["model"])
+            self.config.provider.base_url = cast(str | None, profile.get("baseUrl") or None)
+            self.config.provider.api_key_env = str(profile["apiKeyEnv"])
+            self.agent = self._new_agent(session_id=self.agent.session_id)
+        self.config.save()
+        return {
+            **self.state(),
+            "providerSave": {"ok": True, "message": f"已更新服务商：{profile['displayName']}。"},
+        }
+
+    def delete_provider_profile(self, payload: dict[str, Any]) -> dict[str, Any]:
+        profile_id = str(payload.get("id", "")).strip()
+        if not profile_id:
+            return {**self.state(), "providerSave": {"ok": False, "message": "服务商 ID 不能为空。"}}
+        if profile_id == self._active_provider_id():
+            return {
+                **self.state(),
+                "providerSave": {"ok": False, "message": "默认服务商不能删除，请先切换默认服务商。"},
+            }
+        stored_profiles = self._stored_provider_profiles()
+        if not any(profile["id"] == profile_id for profile in stored_profiles):
+            return {**self.state(), "providerSave": {"ok": False, "message": "未找到这个服务商。"}}
+        profiles = [
+            profile
+            for profile in stored_profiles
+            if profile["id"] != profile_id and not str(profile["id"]).startswith("preset:")
+        ]
+        self.config.provider_profiles = profiles[:12]
+        self.config.save()
+        return {**self.state(), "providerSave": {"ok": True, "message": "已删除服务商。"}}
+
     def _provider_presets_state(self) -> list[dict[str, Any]]:
         return [
             {"id": preset_id, **preset}
@@ -529,10 +593,24 @@ class DesktopApp:
         self.config.provider_profiles = profiles[:12]
 
     def _active_provider_id(self) -> str:
+        for raw_profile in self.config.provider_profiles:
+            if not isinstance(raw_profile, dict):
+                continue
+            profile = self._normalize_provider_profile(raw_profile)
+            if self._profile_matches_active_provider(profile):
+                return str(profile["id"])
         return _provider_profile_id(
             self._active_provider_display_name(),
             self.config.provider.base_url,
             self.config.provider.model,
+        )
+
+    def _profile_matches_active_provider(self, profile: dict[str, Any]) -> bool:
+        return (
+            profile.get("provider") == self.config.provider.name
+            and profile.get("model") == self.config.provider.model
+            and (profile.get("baseUrl") or None) == self.config.provider.base_url
+            and profile.get("apiKeyEnv") == self.config.provider.api_key_env
         )
 
     def _active_provider_display_name(self) -> str:
@@ -1197,10 +1275,13 @@ class DesktopApp:
                 "transport": server.transport,
                 "url": server.url,
                 "envKeys": server.env_keys or [],
+                "enabled": server.enabled,
+                "status": _mcp_server_status(server.enabled, server.command, server.url),
             }
             for server in servers
         ]
         remote = sum(1 for server in servers if server.url)
+        enabled = sum(1 for server in servers if server.enabled)
         return {
             "configFile": str(self.config.mcp_config_file),
             "exists": self.config.mcp_config_file.exists(),
@@ -1208,6 +1289,8 @@ class DesktopApp:
             "error": "",
             "servers": items,
             "total": len(items),
+            "enabled": enabled,
+            "needsAttention": sum(1 for item in items if item["status"] != "Configured"),
             "stdio": len(items) - remote,
             "remote": remote,
         }
@@ -1264,6 +1347,56 @@ class DesktopApp:
             **self.state(),
             "mcpAdd": {"ok": True, "message": f"已写入 MCP 服务：{name}。"},
         }
+
+    def toggle_mcp_server(self, payload: dict[str, Any]) -> dict[str, Any]:
+        name = str(payload.get("name", "")).strip()
+        enabled = payload.get("enabled")
+        if not name or not isinstance(enabled, bool):
+            return {**self.state(), "mcpSave": {"ok": False, "message": "MCP 服务名称或状态无效。"}}
+        try:
+            data, servers = self._read_mcp_config_map()
+            if name not in servers or not isinstance(servers[name], dict):
+                return {**self.state(), "mcpSave": {"ok": False, "message": "未找到这个 MCP 服务。"}}
+            servers[name]["enabled"] = enabled
+            data["mcpServers"] = servers
+            self._write_mcp_config(data)
+        except (OSError, TypeError, json.JSONDecodeError) as exc:
+            return {**self.state(), "mcpSave": {"ok": False, "message": str(exc)}}
+        label = "启用" if enabled else "禁用"
+        return {**self.state(), "mcpSave": {"ok": True, "message": f"已{label} MCP 服务：{name}。"}}
+
+    def delete_mcp_server(self, payload: dict[str, Any]) -> dict[str, Any]:
+        name = str(payload.get("name", "")).strip()
+        if not name:
+            return {**self.state(), "mcpSave": {"ok": False, "message": "MCP 服务名称不能为空。"}}
+        try:
+            data, servers = self._read_mcp_config_map()
+            if name not in servers:
+                return {**self.state(), "mcpSave": {"ok": False, "message": "未找到这个 MCP 服务。"}}
+            del servers[name]
+            data["mcpServers"] = servers
+            self._write_mcp_config(data)
+        except (OSError, TypeError, json.JSONDecodeError) as exc:
+            return {**self.state(), "mcpSave": {"ok": False, "message": str(exc)}}
+        return {**self.state(), "mcpSave": {"ok": True, "message": f"已删除 MCP 服务：{name}。"}}
+
+    def _read_mcp_config_map(self) -> tuple[dict[str, Any], dict[str, Any]]:
+        data: dict[str, Any] = {}
+        if self.config.mcp_config_file.exists():
+            data = json.loads(self.config.mcp_config_file.read_text(encoding="utf-8"))
+        raw_servers = data.get("mcpServers")
+        if not isinstance(raw_servers, dict):
+            raw_servers = data.get("servers")
+        if not isinstance(raw_servers, dict):
+            raw_servers = {}
+        return data, raw_servers
+
+    def _write_mcp_config(self, data: dict[str, Any]) -> None:
+        self.config.mcp_config_file.parent.mkdir(parents=True, exist_ok=True)
+        self.config.mcp_config_file.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
 
     def _agents_settings_state(self) -> dict[str, Any]:
         roles = [
@@ -1453,6 +1586,12 @@ def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
             if self.path == "/api/provider/select":
                 self._send_json(app.select_provider_profile(payload))
                 return
+            if self.path == "/api/provider/update":
+                self._send_json(app.update_provider_profile(payload))
+                return
+            if self.path == "/api/provider/delete":
+                self._send_json(app.delete_provider_profile(payload))
+                return
             if self.path == "/api/test-provider":
                 self._send_json(app.test_provider_settings(payload))
                 return
@@ -1464,6 +1603,12 @@ def _handler_for(app: DesktopApp) -> type[BaseHTTPRequestHandler]:
                 return
             if self.path == "/api/mcp/add":
                 self._send_json(app.add_mcp_server(payload))
+                return
+            if self.path == "/api/mcp/toggle":
+                self._send_json(app.toggle_mcp_server(payload))
+                return
+            if self.path == "/api/mcp/delete":
+                self._send_json(app.delete_mcp_server(payload))
                 return
             if self.path == "/api/terminal/probe":
                 self._send_json(app.terminal_probe())
@@ -1565,6 +1710,14 @@ def _provider_profile_id(display_name: str, base_url: str | None, model: str) ->
         f"{display_name}|{base_url or ''}|{model}".encode()
     ).hexdigest()[:8]
     return f"{slug}-{digest}"
+
+
+def _mcp_server_status(enabled: bool, command: str, url: str | None) -> str:
+    if not enabled:
+        return "Disabled"
+    if url or command:
+        return "Configured"
+    return "Needs configuration"
 
 
 def _parse_datetime(value: Any) -> datetime | None:
@@ -2353,6 +2506,7 @@ def render_desktop_html() -> str:
     .mcp-server-head { display: flex; gap: 10px; align-items: center; justify-content: space-between; }
     .mcp-server-name { color: #202633; font-size: 18px; font-weight: 800; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .mcp-server-meta { color: #7a8798; font-size: 14px; line-height: 1.45; word-break: break-word; }
+    .mcp-card-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
     .mcp-empty { border: 1px dashed #d8e0ea; border-radius: 8px; color: #7a8798; padding: 22px; background: #fbfcfe; }
     .terminal-summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
     .terminal-console {
@@ -2446,7 +2600,12 @@ def render_desktop_html() -> str:
     .provider-card.preset-only { opacity: .82; }
     .provider-name { font-size: 17px; gap: 8px; }
     .provider-meta { font-size: 14px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .provider-card-action { color: #a5543a; font-weight: 760; font-size: 13px; }
+    .provider-inline-actions { display: flex; align-items: center; gap: 8px; justify-content: flex-end; }
+    .provider-card-action {
+      border: 0; background: transparent; color: #a5543a; font-weight: 760; font-size: 13px;
+      cursor: pointer; padding: 6px 4px; white-space: nowrap;
+    }
+    .provider-card-action.danger { color: #b42318; }
     .provider-modal { position: fixed; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center; background: rgba(15, 23, 42, .42); }
     .provider-modal.active { display: flex; }
     .provider-dialog {
@@ -3019,7 +3178,7 @@ def render_desktop_html() -> str:
                     </div>
                     <div class="field">
                       <label for="providerBaseUrl">接口地址 *</label>
-                      <input id="providerBaseUrl" placeholder="https://api.deepseek.com/anthropic" />
+                      <input id="providerBaseUrl" placeholder="https://api.openai.com/v1" />
                     </div>
                     <div class="field">
                       <label for="providerAuthLabel">认证变量</label>
@@ -3040,7 +3199,7 @@ def render_desktop_html() -> str:
                     </div>
                     <div class="field">
                       <label for="providerModel">模型 *</label>
-                      <input id="providerModel" placeholder="deepseek-v4-pro" />
+                      <input id="providerModel" placeholder="gpt-4.1" />
                     </div>
                     <div class="provider-toggle-row">
                       <input type="checkbox" id="providerToolSearch" />
@@ -3485,6 +3644,7 @@ def render_desktop_html() -> str:
     let providerSubmitting = false;
     let providerPresets = [];
     let selectedProviderPreset = 'deepseek';
+    let editingProviderId = '';
     let currentDraftKey = '';
     let desktopSendMode = 'modifier-enter';
     let desktopNotificationsEnabled = false;
@@ -3527,6 +3687,7 @@ def render_desktop_html() -> str:
       renderMemorySettings(state.memorySettings || {});
       if (state.providerSave) showProviderResult(state.providerSave);
       if (state.providerTest) showProviderResult(state.providerTest);
+      if (state.mcpSave) showMcpResult(state.mcpSave);
       if (state.generalSave) showGeneralResult(state.generalSave);
       if (state.h5Save) showH5Result(state.h5Save);
       renderProjectValidation(state.projectValidation);
@@ -3611,37 +3772,56 @@ def render_desktop_html() -> str:
         const presetOnly = profile.presetOnly ? ' preset-only' : '';
         const dot = profile.active || profile.apiKeyPresent ? ' on' : '';
         const defaultBadge = profile.active ? '<span class="badge hot">默认</span>' : '';
-        const action = profile.presetOnly ? '<span class="provider-card-action">添加</span>' : '<span class="provider-card-action">设为默认</span>';
+        const action = profile.presetOnly
+          ? `<button class="provider-card-action" data-provider-add="${escapeHtml(profile.displayName || '')}">添加</button>`
+          : `<div class="provider-inline-actions">
+              ${profile.active ? '' : `<button class="provider-card-action" data-provider-select="${escapeHtml(profile.id)}">设为默认</button>`}
+              <button class="provider-card-action" data-provider-edit="${escapeHtml(profile.id)}">编辑</button>
+              <button class="provider-card-action danger" data-provider-delete="${escapeHtml(profile.id)}">删除</button>
+            </div>`;
         const meta = `${profile.baseUrl || 'Default endpoint'} · ${profile.model || '未配置模型'}`;
-        return `<button class="provider-card${active}${presetOnly}" data-provider-id="${escapeHtml(profile.id)}" data-preset-only="${profile.presetOnly ? '1' : '0'}" data-preset-name="${escapeHtml(profile.displayName || '')}">
+        return `<div class="provider-card${active}${presetOnly}" data-provider-id="${escapeHtml(profile.id)}">
           <div class="drag">⋮⋮</div><div class="status-dot${dot}"></div>
           <div><div class="provider-name"><span>${escapeHtml(profile.displayName || 'Provider')}</span><span class="badge">${escapeHtml(profile.protocolLabel || profile.provider || 'provider')}</span>${defaultBadge}</div><div class="provider-meta">${escapeHtml(meta)}</div></div>
           ${action}
-        </button>`;
+        </div>`;
       }).join('');
-      document.querySelectorAll('[data-provider-id]').forEach(button => {
+      document.querySelectorAll('[data-provider-select]').forEach(button => {
         button.onclick = async () => {
-          if (button.dataset.presetOnly === '1') {
-            const preset = providerPresets.find(item => item.displayName === button.dataset.presetName);
-            openProviderModal(preset ? preset.id : 'deepseek');
-            return;
-          }
-          render(await api('/api/provider/select', {id: button.dataset.providerId}));
+          render(await api('/api/provider/select', {id: button.dataset.providerSelect}));
+        };
+      });
+      document.querySelectorAll('[data-provider-add]').forEach(button => {
+        button.onclick = () => {
+          const preset = providerPresets.find(item => item.displayName === button.dataset.providerAdd);
+          openProviderModal(preset ? preset.id : 'deepseek');
+        };
+      });
+      document.querySelectorAll('[data-provider-edit]').forEach(button => {
+        button.onclick = () => editProviderProfile(button.dataset.providerEdit || '', profiles);
+      });
+      document.querySelectorAll('[data-provider-delete]').forEach(button => {
+        button.onclick = async () => {
+          if (!confirm('删除这个服务商配置？')) return;
+          render(await api('/api/provider/delete', {id: button.dataset.providerDelete}));
         };
       });
     }
     function setProviderSubmitting(active, action) {
       providerSubmitting = active;
       $('addProviderProfile').disabled = active;
-      $('addProviderProfile').textContent = active && action === 'add' ? '添加中...' : '添加';
+      const label = editingProviderId ? '保存' : '添加';
+      $('addProviderProfile').textContent = active ? '处理中...' : label;
     }
     async function runProviderAction(action) {
       if (providerSubmitting) return;
       setProviderSubmitting(true, action);
-      showProviderResult({ok: true, message: '正在添加服务商...'});
+      showProviderResult({ok: true, message: editingProviderId ? '正在更新服务商...' : '正在添加服务商...'});
       try {
-        const path = '/api/provider/add';
-        const state = await api(path, providerPayload());
+        const payload = providerPayload();
+        if (editingProviderId) payload.id = editingProviderId;
+        const path = editingProviderId ? '/api/provider/update' : '/api/provider/add';
+        const state = await api(path, payload);
         if (state.providerSave && state.providerSave.ok) closeProviderModal();
         render(state);
       } finally {
@@ -3665,6 +3845,8 @@ def render_desktop_html() -> str:
       });
     }
     function openProviderModal(presetId) {
+      editingProviderId = '';
+      $('addProviderProfile').textContent = '添加';
       $('providerModal').classList.add('active');
       $('providerModal').setAttribute('aria-hidden', 'false');
       applyProviderPreset(presetId || selectedProviderPreset || 'deepseek');
@@ -3672,6 +3854,30 @@ def render_desktop_html() -> str:
     function closeProviderModal() {
       $('providerModal').classList.remove('active');
       $('providerModal').setAttribute('aria-hidden', 'true');
+      editingProviderId = '';
+      $('addProviderProfile').textContent = '添加';
+    }
+    function editProviderProfile(profileId, profiles) {
+      const profile = profiles.find(item => item.id === profileId);
+      if (!profile) return;
+      editingProviderId = profileId;
+      selectedProviderPreset = '';
+      $('providerDisplayName').value = profile.displayName || '';
+      $('providerNote').value = profile.note || '';
+      $('providerBaseUrl').value = profile.baseUrl || '';
+      $('providerProtocol').value = profile.provider || 'openai-compatible';
+      $('providerModel').value = profile.model || '';
+      $('providerToolSearch').checked = profile.toolSearchEnabled !== false;
+      const apiKeyEnv = profile.apiKeyEnv || 'OPENAI_API_KEY';
+      const select = $('providerAuthLabel');
+      if (![...select.options].some(option => option.value === apiKeyEnv)) {
+        select.add(new Option(`Bearer Token (${apiKeyEnv})`, apiKeyEnv));
+      }
+      select.value = apiKeyEnv;
+      $('addProviderProfile').textContent = '保存';
+      $('providerModal').classList.add('active');
+      $('providerModal').setAttribute('aria-hidden', 'false');
+      renderProviderPresetPills();
     }
     function applyProviderPreset(presetId) {
       selectedProviderPreset = presetId;
@@ -3853,15 +4059,42 @@ def render_desktop_html() -> str:
         const args = (server.args || []).join(' ');
         const commandLine = server.url || [server.command, args].filter(Boolean).join(' ');
         const envKeys = (server.envKeys || []).length ? `环境变量：${server.envKeys.join(', ')}` : '无环境变量声明';
+        const statusClass = server.status === 'Configured' ? 'ok' : server.status === 'Disabled' ? '' : 'hot';
+        const nextEnabled = !server.enabled;
         return `<div class="mcp-server-card">
-          <div class="mcp-server-head"><div class="mcp-server-name">${escapeHtml(server.name || 'unnamed')}</div><span class="badge">${escapeHtml(server.transport || 'stdio')}</span></div>
+          <div class="mcp-server-head">
+            <div class="mcp-server-name">${escapeHtml(server.name || 'unnamed')}</div>
+            <div class="mcp-card-actions">
+              <span class="badge ${statusClass}">${escapeHtml(server.status || 'Configured')}</span>
+              <span class="badge">${escapeHtml(server.transport || 'stdio')}</span>
+              <button class="provider-card-action" data-mcp-toggle="${escapeHtml(server.name || '')}" data-mcp-enabled="${nextEnabled ? '1' : '0'}">${server.enabled ? '禁用' : '启用'}</button>
+              <button class="provider-card-action danger" data-mcp-delete="${escapeHtml(server.name || '')}">删除</button>
+            </div>
+          </div>
           <div class="mcp-server-meta">${escapeHtml(commandLine || '未配置启动命令')}</div>
           <div class="mcp-server-meta">${escapeHtml(envKeys)}</div>
         </div>`;
       }).join('');
+      document.querySelectorAll('[data-mcp-toggle]').forEach(button => {
+        button.onclick = async () => {
+          render(await api('/api/mcp/toggle', {name: button.dataset.mcpToggle, enabled: button.dataset.mcpEnabled === '1'}));
+        };
+      });
+      document.querySelectorAll('[data-mcp-delete]').forEach(button => {
+        button.onclick = async () => {
+          if (!confirm('删除这个 MCP 服务？')) return;
+          render(await api('/api/mcp/delete', {name: button.dataset.mcpDelete}));
+        };
+      });
     }
     async function refreshMcpSettings() {
       renderMcpSettings(await api('/api/mcp'));
+    }
+    function showMcpResult(result) {
+      const box = $('mcpResult');
+      box.textContent = result.message;
+      box.classList.toggle('ok', !!result.ok);
+      box.classList.toggle('bad', !result.ok);
     }
     function showMcpListView() {
       $('mcpSettingsPage').classList.remove('form-mode');

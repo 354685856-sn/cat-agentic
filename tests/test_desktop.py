@@ -96,6 +96,8 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert 'id="openMcpAddView"' in html
     assert 'id="saveMcpServer"' in html
     assert "/api/mcp/add" in html
+    assert "/api/mcp/toggle" in html
+    assert "/api/mcp/delete" in html
     assert "连接自定义 MCP" in html
     assert 'id="agentsSettingsPanel"' in html
     assert 'id="refreshAgentsSettings"' in html
@@ -151,6 +153,10 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "providerPresetPills" in html
     assert "/api/provider/add" in html
     assert "/api/provider/select" in html
+    assert "/api/provider/update" in html
+    assert "/api/provider/delete" in html
+    assert "https://api.openai.com/v1" in html
+    assert "gpt-4.1" in html
     assert "providerSubmitting" in html
     assert "runProviderAction" in html
     assert "添加服务商" in html
@@ -801,6 +807,51 @@ def test_desktop_provider_profiles_add_and_select_without_secret_value(tmp_path:
     selected = app.select_provider_profile({"id": active["id"]})
     assert selected["providerSave"]["ok"] is True
 
+    updated = app.update_provider_profile(
+        {
+            "id": active["id"],
+            "displayName": "DeepSeek Local",
+            "provider": "anthropic",
+            "protocolLabel": "DeepSeek",
+            "model": "deepseek-v4-flash",
+            "baseUrl": "https://api.deepseek.com/anthropic",
+            "apiKeyEnv": "ANTHROPIC_AUTH_TOKEN",
+            "toolSearchEnabled": False,
+        }
+    )
+    assert updated["providerSave"]["ok"] is True
+    assert updated["model"] == "deepseek-v4-flash"
+    delete_active = app.delete_provider_profile({"id": active["id"]})
+    assert delete_active["providerSave"]["ok"] is False
+    assert "默认服务商不能删除" in delete_active["providerSave"]["message"]
+
+
+def test_desktop_provider_presets_include_openai_official_endpoint(tmp_path: Path) -> None:
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+
+    presets = app.state()["providerPresets"]
+    openai = next(preset for preset in presets if preset["id"] == "openai")
+
+    assert openai["displayName"] == "OpenAI"
+    assert openai["provider"] == "openai-compatible"
+    assert openai["baseUrl"] == "https://api.openai.com/v1"
+    assert openai["apiKeyEnv"] == "OPENAI_API_KEY"
+
+    added = app.add_provider_profile({"presetId": "openai"})
+
+    assert added["providerSave"]["ok"] is True
+    assert added["provider"] == "openai-compatible"
+    assert added["model"] == "gpt-4.1"
+    assert added["providerProfiles"][0]["displayName"] == "OpenAI"
+
 
 def test_desktop_add_mcp_server_writes_local_config(tmp_path: Path) -> None:
     config = RuntimeConfig(
@@ -829,6 +880,17 @@ def test_desktop_add_mcp_server_writes_local_config(tmp_path: Path) -> None:
     assert saved["mcpServers"]["chrome-devtools"]["command"] == "npx"
     assert saved["mcpServers"]["chrome-devtools"]["args"] == ["chrome-devtools-mcp@latest"]
     assert saved["mcpServers"]["chrome-devtools"]["env"] == {"CHROME_TOKEN": ""}
+
+    disabled = app.toggle_mcp_server({"name": "chrome-devtools", "enabled": False})
+    saved_disabled = json.loads((tmp_path / "mcp.json").read_text(encoding="utf-8"))
+    assert disabled["mcpSave"]["ok"] is True
+    assert saved_disabled["mcpServers"]["chrome-devtools"]["enabled"] is False
+    assert disabled["mcpSettings"]["servers"][0]["status"] == "Disabled"
+
+    deleted = app.delete_mcp_server({"name": "chrome-devtools"})
+    saved_deleted = json.loads((tmp_path / "mcp.json").read_text(encoding="utf-8"))
+    assert deleted["mcpSave"]["ok"] is True
+    assert "chrome-devtools" not in saved_deleted["mcpServers"]
 
 
 def test_desktop_general_settings_are_validated_and_persisted(tmp_path: Path) -> None:
