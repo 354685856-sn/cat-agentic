@@ -3233,6 +3233,7 @@ def render_desktop_html() -> str:
       border-radius: 0;
       color: #667085;
       font-size: 15px;
+      line-height: 20px;
       font-weight: 620;
       letter-spacing: 0;
       transition: background .16s ease, color .16s ease, box-shadow .16s ease;
@@ -3305,6 +3306,11 @@ def render_desktop_html() -> str:
     .app.settings-open .general-card-panel {
       padding: 14px;
     }
+    .app.settings-open .setting-card.segmented.three,
+    .app.settings-open .setting-card.segmented.five {
+      padding: 12px 14px;
+      gap: 12px;
+    }
     .app.settings-open .segment-option {
       min-height: 58px;
       border: 1px solid #d9e1ec;
@@ -3314,7 +3320,26 @@ def render_desktop_html() -> str:
       padding: 14px 16px;
       text-align: left;
       font-weight: 620;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      line-height: 1.25;
       transition: border-color .16s ease, background .16s ease, color .16s ease, box-shadow .16s ease;
+    }
+    .app.settings-open .setting-card.segmented.three .segment-option,
+    .app.settings-open .setting-card.segmented.five .segment-option {
+      min-height: 46px;
+      padding: 0 16px;
+      align-items: center;
+      text-align: center;
+    }
+    .app.settings-open .setting-card.segmented.three .segment-option small {
+      display: none;
+    }
+    .app.settings-open .setting-card.segmented.four .segment-option {
+      min-height: 78px;
+      padding: 14px 16px;
     }
     .app.settings-open .segment-option:hover {
       border-color: #c5d0df;
@@ -3331,6 +3356,7 @@ def render_desktop_html() -> str:
       font-size: 15px;
       line-height: 1.2;
       font-weight: 780;
+      display: block;
     }
     .app.settings-open .segment-option small {
       margin-top: 6px;
@@ -3338,6 +3364,7 @@ def render_desktop_html() -> str:
       font-size: 13px;
       line-height: 1.38;
       font-weight: 460;
+      display: block;
     }
     .app.settings-open .field label {
       color: #7b8492;
@@ -3355,6 +3382,7 @@ def render_desktop_html() -> str:
       background: #ffffff;
       color: #1d2530;
       font-size: 15px;
+      line-height: 20px;
       font-weight: 540;
     }
     .app.settings-open .setting-row {
@@ -3378,18 +3406,21 @@ def render_desktop_html() -> str:
       height: 26px;
     }
     .app.settings-open .general-actions {
-      position: sticky;
-      bottom: 0;
-      z-index: 5;
+      position: static;
       margin-top: 12px;
-      padding: 16px 0 4px;
-      background: linear-gradient(180deg, rgba(255,255,255,0), #fff 42%);
+      padding: 4px 0 0;
+      background: transparent;
     }
     .app.settings-open .primary-btn,
     .app.settings-open .secondary-btn {
       border-radius: 8px;
       font-size: 14px;
+      line-height: 20px;
       font-weight: 760;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
     .app.settings-open .settings-result {
       color: #7b8492;
@@ -3409,6 +3440,152 @@ def render_desktop_html() -> str:
       --dark-accent: #ffac96;
       background: var(--dark-bg);
       color: var(--dark-text);
+    }
+    body.theme-classic {
+      --classic-bg: #fff7f0;
+      --classic-stage: #fff4ea;
+      --classic-panel: #fffaf6;
+      --classic-panel-2: #fff1e8;
+      --classic-border: #ead7ca;
+      --classic-border-2: #d9b7a5;
+      --classic-text: #2b211c;
+      --classic-muted: #8a7164;
+      --classic-accent: #a55339;
+      background: var(--classic-bg);
+      color: var(--classic-text);
+    }
+    body.theme-classic .app,
+    body.theme-classic .app.settings-open {
+      background: var(--classic-stage);
+      color: var(--classic-text);
+    }
+    body.theme-classic aside {
+      background: linear-gradient(180deg, #fff4eb, #f9ebe1);
+      border-right-color: var(--classic-border);
+    }
+    body.theme-classic .topbar,
+    body.theme-classic .app.settings-open .topbar {
+      background: rgba(255, 246, 239, .94);
+      border-bottom-color: var(--classic-border);
+      box-shadow: none;
+    }
+    body.theme-classic .mode-tab,
+    body.theme-classic .mode-tab-static {
+      color: #80695d;
+      border-right-color: var(--classic-border);
+      background: transparent;
+    }
+    body.theme-classic .mode-tab.active {
+      color: var(--classic-text);
+      border-bottom-color: #c36e4c;
+    }
+    body.theme-classic .brand-left,
+    body.theme-classic .main-nav button,
+    body.theme-classic .side-heading,
+    body.theme-classic .project-header,
+    body.theme-classic .account-title,
+    body.theme-classic .settings-gear {
+      color: var(--classic-text);
+    }
+    body.theme-classic .main-nav button,
+    body.theme-classic .conversation-row,
+    body.theme-classic .session-meta,
+    body.theme-classic .relative-age {
+      color: var(--classic-muted);
+    }
+    body.theme-classic .search-shell,
+    body.theme-classic .sidebar-tool-btn,
+    body.theme-classic .account-card {
+      background: rgba(255, 250, 246, .92);
+      border-color: var(--classic-border);
+      color: var(--classic-text);
+    }
+    body.theme-classic .sidebar-footer {
+      background: rgba(255, 246, 239, .88);
+      border-top-color: var(--classic-border);
+    }
+    body.theme-classic .app.settings-open .settings-layout {
+      background: var(--classic-stage);
+    }
+    body.theme-classic .app.settings-open .settings-nav {
+      background: #fff1e8;
+      border-right-color: var(--classic-border);
+    }
+    body.theme-classic .app.settings-open .settings-nav button {
+      color: #82695c;
+    }
+    body.theme-classic .app.settings-open .settings-nav button span:first-child {
+      color: #99786a;
+    }
+    body.theme-classic .app.settings-open .settings-nav button.active {
+      background: #f4dfd2;
+      color: var(--classic-text);
+      box-shadow: inset 2px 0 0 #bd6d3f;
+    }
+    body.theme-classic .app.settings-open .settings-nav button.active span:first-child {
+      color: var(--classic-text);
+    }
+    body.theme-classic .app.settings-open .settings-panel {
+      color: var(--classic-text);
+    }
+    body.theme-classic .app.settings-open .settings-title,
+    body.theme-classic .app.settings-open .general-section h3,
+    body.theme-classic .app.settings-open .setting-name {
+      color: var(--classic-text);
+    }
+    body.theme-classic .app.settings-open .settings-subtitle,
+    body.theme-classic .app.settings-open .general-section > p,
+    body.theme-classic .app.settings-open .setting-help {
+      color: var(--classic-muted);
+    }
+    body.theme-classic .app.settings-open .setting-card,
+    body.theme-classic .app.settings-open .general-card-panel,
+    body.theme-classic .app.settings-open .storage-card {
+      background: var(--classic-panel);
+      border-color: var(--classic-border);
+    }
+    body.theme-classic .app.settings-open .segment-option {
+      background: #fffdfb;
+      border-color: var(--classic-border);
+      color: #5f4d44;
+    }
+    body.theme-classic .app.settings-open .segment-option:hover {
+      background: #fff8f2;
+      border-color: var(--classic-border-2);
+      color: var(--classic-text);
+    }
+    body.theme-classic .app.settings-open .segment-option.active {
+      background: linear-gradient(180deg, #fff3ea, #ffe3d3);
+      border-color: var(--classic-accent);
+      color: var(--classic-text);
+      box-shadow: 0 0 0 1px rgba(165, 83, 57, .12), 0 12px 28px rgba(165, 83, 57, .08);
+    }
+    body.theme-classic .app.settings-open .segment-option small {
+      color: #927366;
+    }
+    body.theme-classic .app.settings-open .field input,
+    body.theme-classic .app.settings-open .field select,
+    body.theme-classic .app.settings-open .general-input-row input,
+    body.theme-classic .app.settings-open .storage-path,
+    body.theme-classic .app.settings-open .mcp-config-path {
+      background: #fffdfb;
+      border-color: var(--classic-border);
+      color: var(--classic-text);
+    }
+    body.theme-classic .app.settings-open .primary-btn {
+      background: #a55339;
+      box-shadow: 0 10px 22px rgba(165, 83, 57, .12);
+    }
+    body.theme-classic .app.settings-open .secondary-btn {
+      background: #fff9f4;
+      border-color: var(--classic-border);
+      color: var(--classic-text);
+    }
+    body.theme-classic .app.settings-open .general-actions {
+      background: transparent;
+    }
+    body.theme-classic .settings-result {
+      color: var(--classic-muted);
     }
     body.theme-dark .app,
     body.theme-dark .app.settings-open,
@@ -3550,7 +3727,7 @@ def render_desktop_html() -> str:
       color: var(--dark-text);
     }
     body.theme-dark .app.settings-open .general-actions {
-      background: linear-gradient(180deg, rgba(15,17,21,0), var(--dark-bg) 42%);
+      background: transparent;
     }
     body.theme-dark .settings-result {
       color: var(--dark-muted);
