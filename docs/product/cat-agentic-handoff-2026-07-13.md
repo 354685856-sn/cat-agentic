@@ -356,6 +356,7 @@ contains multiple completed settings slices, not just the latest About change.
 ## 2026-07-20 Ocean settings visual-QA follow-up
 
 - 2026-07-26 GitHub CI remediation: PR #31 added only the missing protected fixture `tests/fixtures/sync/keryk-ai/.claude/settings.local.json`, merged as `2dbbc262a58543455c3e74d3cb26f8ed3b8a6567`. On `main`, Docker Build `30191217216`, CI `30191217265`, and Fork Sync Compatibility `30191217238` all passed. Historical Docker red notifications were from the earlier `{{REGISTRY}}` template bug, already corrected in the current workflow.
+- 2026-07-28 publication follow-up: PR #30 merged as `d81dfa8` with CI/Docker green. Pages deployment initially failed because the repository had no Pages site; PR #32 (`bfd0e52`) added `enablement: true`, but repository-level creation still needed an owner-authenticated API call. Pages is now enabled with `build_type=workflow`; deployment `30339422031` passed, and `https://354685856-sn.github.io/cat-agentic/` plus `/download/` return HTTP 200 over enforced HTTPS.
 - Ocean nested-surface repair is complete in `src/x_agentic_workflow/desktop.py`, with static regression coverage in `tests/test_desktop.py`.
 - Desktop `1128x794` and mobile `390x844`: all enabled settings views have no visible white surfaces and no horizontal overflow; console is clean.
 - Safe controls verified: new chat, scheduled view, sidebar collapse/restore, settings close, model shortcut, Skills shortcut. Do not treat external/network/write controls as automatically authorized.
