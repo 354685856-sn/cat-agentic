@@ -3,6 +3,7 @@ from pathlib import Path
 
 from x_agentic_workflow.agent import Agent
 from x_agentic_workflow.config import RuntimeConfig
+from x_agentic_workflow.mcp import project_private_mcp_file, project_shared_mcp_file
 from x_agentic_workflow.providers import FakeProvider
 from x_agentic_workflow.types import AgentEvent, ModelResponse, ToolCall
 
@@ -83,6 +84,40 @@ def test_agent_mcp_context_summary_omits_disabled_servers(tmp_path: Path) -> Non
 
     assert "enabled-server" in summary
     assert "disabled-server" not in summary
+
+
+def test_agent_mcp_context_summary_reads_scoped_configs(tmp_path: Path) -> None:
+    private_file = project_private_mcp_file(tmp_path, tmp_path)
+    shared_file = project_shared_mcp_file(tmp_path)
+    user_file = tmp_path / "user-mcp.json"
+    private_file.parent.mkdir(parents=True)
+    private_file.write_text(
+        json.dumps({"mcpServers": {"private-server": {"command": "npx"}}}),
+        encoding="utf-8",
+    )
+    shared_file.write_text(
+        json.dumps({"mcpServers": {"shared-server": {"url": "https://example.com/mcp"}}}),
+        encoding="utf-8",
+    )
+    user_file.write_text(
+        json.dumps({"mcpServers": {"user-server": {"command": "uvx", "args": ["tool"]}}}),
+        encoding="utf-8",
+    )
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / ".sessions",
+        skills_dir=tmp_path / ".skills",
+        hooks_dir=tmp_path / ".hooks",
+        mcp_config_file=user_file,
+    )
+    agent = Agent(config, session_id="mcp-scoped")
+
+    summary = agent.mcp.context_summary()
+
+    assert "private-server" in summary
+    assert "shared-server" in summary
+    assert "user-server" in summary
 
 
 def test_agent_system_prompt_includes_desktop_preferences(tmp_path: Path) -> None:

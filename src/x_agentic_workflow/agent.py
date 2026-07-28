@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 from .config import RuntimeConfig
 from .hooks import HookRunner
-from .mcp import McpRegistry
+from .mcp import McpRegistry, scoped_mcp_config_files
 from .multi_agent import role_prompt
 from .providers import ModelProvider, build_provider
 from .sessions import SessionStore
@@ -37,7 +37,13 @@ class Agent:
         self.messages = self.sessions.load(self.session_id)
         self.skills = SkillRegistry(config.skills_dir)
         self.hooks = HookRunner(config.hooks_dir)
-        self.mcp = McpRegistry(config.mcp_config_file)
+        self.mcp = McpRegistry(
+            scoped_mcp_config_files(
+                config.config_file.parent,
+                config.workdir,
+                config.mcp_config_file,
+            )
+        )
         if not self.messages:
             self.messages.append(Message(role="system", content=self._system_prompt("")))
 

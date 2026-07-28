@@ -1,24 +1,34 @@
+import hashlib
 import json
 import re
 import socket
 import subprocess
-from datetime import datetime
+import threading
+from datetime import datetime, timedelta
+from http.cookiejar import CookieJar
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError
+from urllib.parse import parse_qs, urlparse
+from urllib.request import HTTPCookieProcessor, Request, build_opener, urlopen
 
 import pytest
 
+import x_agentic_workflow.desktop as desktop_module
 from x_agentic_workflow.config import RuntimeConfig
 from x_agentic_workflow.desktop import (
     DesktopApp,
     _create_server,
+    _handler_for,
     _project_sessions_dir,
     _prompt_with_attachment_context,
     _validate_project,
     _validate_text_attachments,
     render_desktop_html,
+    render_h5_access_denied_html,
 )
+from x_agentic_workflow.mcp import project_private_mcp_file, project_shared_mcp_file
 from x_agentic_workflow.types import AgentEvent, Message, ModelResponse, ToolSpec
 
 
@@ -45,7 +55,50 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "inspector-card" in html
     assert "inspectorToggle" in html
     assert "inspector-collapsed" in html
-    assert "title=\"列表\"" in html
+    assert '<div class="app inspector-collapsed context-idle">' in html
+    assert 'id="inspectorAdd"' not in html
+    assert 'id="inspectorView"' not in html
+    assert 'id="closeSettings"' in html
+    assert 'id="dismissTopbar"' not in html
+    assert 'id="restoreTopbar"' not in html
+    assert 'id="workspaceHeader"' in html
+    assert 'id="sidebarOpen"' in html
+    assert "$('sidebarOpen').addEventListener('click'" in html
+    assert 'id="taskRunPanel"' in html
+    assert 'id="taskRunEyebrow"' in html
+    assert 'id="taskRunTitle"' in html
+    assert 'id="taskRunModelName"' in html
+    assert 'class="task-run-model-chip"' in html
+    assert 'id="projectPickerToggle"' in html
+    assert 'id="taskHistoryHeading"' in html
+    assert 'class="hero-logo"' not in html
+    assert "app.classList.toggle('context-idle', !hasTaskContext)" in html
+    assert "app.classList.toggle('code-context', hasCodeContext)" in html
+    assert ".app.context-active:not(.code-context).inspector-collapsed:not(.settings-open)" in html
+    assert "app.classList.toggle('task-running', running)" in html
+    assert "composer-engaged" in html
+    assert "body.theme-dark .app:not(.settings-open) .project-header," in html
+    assert "closeSettings').hidden = !settings" in html
+    assert ".app { grid-template-columns: minmax(260px, 388px) minmax(0, 1fr)" in html
+    assert "min-width: 520px" not in html
+    assert ".app.settings-open { grid-template-columns: 282px minmax(0, 1fr) 0; }" in html
+    assert (
+        ".app.settings-open .settings-layout { "
+        "grid-template-columns: 181px minmax(0, 1fr); }"
+    ) in html
+    assert ".app.settings-open .topbar { height: 44px; }" in html
+    assert ".workspace-header-main" in html
+    assert "settings-result provider-result" in html
+    assert 'data-language="en"' in html
+    assert 'data-language="zh-CN"' in html
+    assert 'data-language="zh-TW"' not in html
+    assert 'data-language="ja"' not in html
+    assert 'data-language="ko"' not in html
+    assert "I18N['zh-TW']" not in html
+    assert "I18N.ja" not in html
+    assert "I18N.ko" not in html
+    assert "desktopLanguageCoverage" in html
+    assert "Workbench surface consolidation" in html
     assert "文件变更" in html
     assert "Diff" in html
     assert "latestDiff" in html
@@ -71,28 +124,53 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "/api/scheduled/delete" in html
     assert "/api/settings/general" in html
     assert "/api/settings/h5" in html
+    assert "/api/h5/pairing/create" in html
+    assert "/api/h5/access/revoke" in html
     assert "/api/terminal" in html
     assert "/api/terminal/probe" in html
     assert "/api/mcp" in html
     assert "/api/agents" in html
     assert "/api/skills" in html
+    assert "/api/skills/preview" in html
     assert "/api/memory" in html
     assert "/api/memory/preview" in html
     assert "/api/plugins" in html
+    assert "/api/plugins/preview" in html
+    assert "/api/marketplace" in html
+    assert 'id="marketplaceReview"' in html
+    assert 'id="marketplaceContentHash"' in html
+    assert "marketplaceReviewBoundary" in html
     assert "/api/computer-use" in html
+    assert "/api/computer-use/open-settings" in html
     assert "/api/token-usage" in html
     assert "/api/trace" in html
+    assert "/api/trace/preview" in html
+    assert "/api/trace/open-directory" in html
     assert "/api/diagnostics" in html
+    assert "/api/diagnostics/export" in html
+    assert "/api/update-check" in html
     assert 'id="pluginsSettingsPanel"' in html
     assert 'id="computerUseSettingsPanel"' in html
+    assert 'id="computerUseResult"' in html
+    assert 'id="computerUseReadiness"' in html
+    assert 'class="computer-use-groups"' in html
+    assert "computerEnvironmentGroup" in html
+    assert "computerPermissionsGroup" in html
     assert 'id="tokenUsageSettingsPanel"' in html
     assert 'id="traceSettingsPanel"' in html
+    assert 'id="openTraceDirectory"' in html
+    assert 'id="tracePreview"' in html
     assert 'id="diagnosticsSettingsPanel"' in html
+    assert 'id="exportDiagnosticsReport"' in html
     assert 'data-settings-view="plugins"' in html
     assert 'data-settings-view="computerUse"' in html
     assert 'data-settings-view="tokenUsage"' in html
     assert 'data-settings-view="trace"' in html
     assert 'data-settings-view="diagnostics"' in html
+    assert 'data-settings-view="about"' in html
+    assert 'id="aboutSettingsPanel"' in html
+    assert 'id="checkForUpdates"' in html
+    assert 'id="aboutVersion">0.17.0<' in html
     assert 'data-settings-view="general"' in html
     assert 'data-settings-view="h5"' in html
     assert 'data-settings-view="terminal"' in html
@@ -101,7 +179,14 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert 'data-settings-view="skills"' in html
     assert 'data-settings-view="memory"' in html
     assert 'id="h5SettingsPanel"' in html
+    assert 'id="h5ConnectionSection"' in html
+    assert 'class="h5-service-bar"' in html
+    assert 'class="h5-guide"' in html
     assert 'id="saveH5Settings"' in html
+    assert 'id="createH5Pairing"' in html
+    assert 'id="revokeH5Access"' in html
+    assert 'id="copyH5Pairing"' in html
+    assert 'id="h5PairingUrl"' in html
     assert "保存 H5 设置" in html
     assert 'id="terminalSettingsPanel"' in html
     assert 'id="refreshTerminalSettings"' in html
@@ -109,7 +194,12 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "探针输出" in html
     assert 'id="mcpSettingsPanel"' in html
     assert 'id="openMcpAddView"' in html
+    assert 'id="backMcpList"' in html
     assert 'id="saveMcpServer"' in html
+    assert 'id="mcpTargetProject"' in html
+    assert 'data-mcp-scope="project-private"' in html
+    assert 'data-mcp-scope="project-shared"' in html
+    assert 'data-mcp-scope="user"' in html
     assert "/api/mcp/add" in html
     assert "/api/mcp/toggle" in html
     assert "/api/mcp/delete" in html
@@ -133,7 +223,15 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert 'data-theme="pure"' in html
     assert "body.theme-dark" in html
     assert "applyTheme" in html
+    assert "const I18N" in html
     assert "markGeneralDirty" in html
+    assert "applyStaticTranslations" in html
+    assert ".terminal-summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }" in html
+    assert ".agents-hero { grid-template-columns: minmax(0, 1fr); padding: 20px 18px; }" in html
+    assert ".memory-explorer { grid-template-columns: minmax(0, 1fr); min-height: 0; }" in html
+    assert ".segmented.five .segment-option:last-child" in html
+    assert ".app.settings-open .segmented.four" in html
+    assert "Save General Settings" in html
     assert 'id="replyLanguage"' in html
     assert 'data-output-style="review"' in html
     assert 'data-permission-mode="skip"' in html
@@ -157,7 +255,6 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "githubBtn" in html
     assert "sidebarToggle" in html
     assert "scheduledBtn" in html
-    assert "scheduledTab" in html
     assert "scheduledScreen" in html
     assert "createScheduledTask" in html
     assert "scheduledList" in html
@@ -203,7 +300,117 @@ def test_desktop_html_contains_clean_room_app_shell() -> None:
     assert "localStorage.removeItem(currentDraftKey)" in html
     assert "JSON.stringify(pendingAttachments)" not in html
     assert '<span class="settings-nav-label">Token 用量</span>' in html
+    assert 'id="tokenRangeTabs"' in html
+    assert "#tokenUsageResult.bad { color: #b42318; }" in html
+    assert "#tokenUsageList .memory-card { box-sizing: border-box" in html
+    assert "#tokenUsageList .memory-title" in html
+    assert 'data-token-days="30"' in html
+    assert 'data-token-days="90"' in html
+    assert 'data-token-days="365" aria-pressed="true"' in html
+    assert "button.setAttribute('aria-pressed', String(active))" in html
+    assert 'id="tokenHeatmapGrid"' in html
+    assert 'id="tokenMethodNote"' in html
+    assert 'id="tokenTodayTokens"' in html
+    assert "tokenState.ok === false" in html
+    assert "/api/token-usage?days=${selectedTokenUsageDays}" in html
     assert html.index('class="composer-actions"') < html.index('class="project-picker"')
+
+
+def test_desktop_home_has_crow5_inspired_real_quick_task_controls() -> None:
+    html = render_desktop_html()
+
+    assert 'class="activity-rail"' in html
+    assert 'class="session-sidebar"' in html
+    assert 'aria-label="工作区导航"' in html
+    assert ".activity-rail {" in html
+    assert ".session-sidebar {" in html
+    assert 'id="homeQuickTasks"' in html
+    assert 'data-quick-task="inspect"' in html
+    assert 'data-quick-task="tests"' in html
+    assert 'data-quick-task="explain"' in html
+    assert "function applyQuickTask(task)" in html
+    assert "$('prompt').focus()" in html
+    assert ".app:not(.settings-open) .home-quick-task" in html
+    assert "box-shadow: 0 3px 0" in html
+    assert ".home-quick-task:active" in html
+    assert 'data-theme="ocean"' in html
+    assert 'data-theme="comic"' in html
+    assert "body.theme-ocean" in html
+    assert "body.theme-comic" in html
+    assert (
+        "body.theme-ocean .app:not(.settings-open) .composer textarea { background: #10263a;"
+        in html
+    )
+    assert "body.theme-ocean #homeProviderEndpoint { border: 0; background: transparent;" in html
+    assert (
+        "@media (max-width: 860px) { .app:not(.settings-open) > aside:first-child "
+        "{ display: none; }"
+        in html
+    )
+    assert ".app:not(.settings-open) .sidebar-tool-btn" in html
+    assert ".activity-rail #newChat" in html
+    assert "#inspectorToggle {\n      box-shadow: 0 2px 0 rgba(7,35,59,.78)" in html
+    assert ".app.context-idle:not(.composer-engaged) #validateProject { display: none; }" in html
+    assert ".app.context-idle:not(.composer-engaged) .model { display: none; }" not in html
+    assert 'id="composerSkills"' in html
+    assert "document.querySelector('[data-settings-view=\"skills\"]')?.click()" in html
+    assert (
+        "body.theme-ocean .app:not(.settings-open) .round,\n"
+        "    body.theme-ocean .app:not(.settings-open) .pill"
+        in html
+    )
+    assert (
+        "body.theme-ocean .app:not(.settings-open) .model[data-family] "
+        "{ background: #123653;"
+        in html
+    )
+    assert (
+        "body.theme-ocean .app:not(.settings-open) .project-picker "
+        "{ background: #0d2235;"
+        in html
+    )
+    assert (
+        "body.theme-ocean .app.settings-open { grid-template-columns: minmax(0, 1fr) 0;"
+        in html
+    )
+    assert "body.theme-ocean .app.settings-open > aside:first-child { display: none; }" in html
+    assert "body.theme-ocean .app.settings-open .settings-layout { background: #091827;" in html
+    assert "body.theme-ocean .app.settings-open .segment-option { background: #10263a;" in html
+    assert "body.theme-ocean .app.settings-open .field select { background: #10263a;" in html
+    assert "body.theme-ocean .app.settings-open .mcp-stat { background: #10263a;" in html
+    assert "body.theme-ocean .app.settings-open .mcp-empty { background: #10263a;" in html
+    assert (
+        "body.theme-ocean .app.settings-open .marketplace-source-select "
+        "{ background: #10263a;"
+        in html
+    )
+    assert "body.theme-ocean .app.settings-open .token-range-button { background: #123653;" in html
+    assert "body.theme-ocean .app.settings-open .about-card { background: #10263a;" in html
+    assert "body.theme-ocean .app.settings-open .plugin-preview-section," in html
+    assert "body.theme-ocean .app.settings-open .skill-empty," in html
+    assert "body.theme-ocean .app.settings-open .marketplace-section," in html
+    assert "body.theme-ocean .app.settings-open .token-summary-grid," in html
+    assert "body.theme-ocean .app.settings-open .token-heatmap-card { background: #10263a;" in html
+    assert "body.theme-ocean .app.settings-open .about-logo," in html
+    assert "body.theme-ocean .app.settings-open .about-update-panel { background: #0d2235;" in html
+    assert "body.theme-ocean .app.settings-open .h5-service-bar," in html
+    assert "body.theme-ocean .app.settings-open .step-btn { background: #123653;" in html
+    assert (
+        "body.theme-ocean .app.settings-open .provider-save-status { background: #123653;"
+        in html
+    )
+    assert (
+        'body.theme-ocean .app.settings-open .scale-row input[type="range"] '
+        "{ accent-color: #78cceb;" in html
+    )
+    assert "body.theme-ocean .app.settings-open .agents-hero," in html
+    assert "body.theme-ocean .app.settings-open .memory-explorer," in html
+    assert "body.theme-ocean .app.settings-open .computer-use-readiness," in html
+    assert "box-shadow: 0 2px 0 rgba(3,21,35,.86)" in html
+    assert 'id="homeProviderEndpoint"' in html
+    assert 'id="homeConnectionTest"' in html
+    assert "Run this project\\'s tests" in html
+    assert "Explain the current project\\'s core structure" in html
 
 
 def test_desktop_records_write_file_ledger_and_latest_diff(tmp_path: Path) -> None:
@@ -760,6 +967,29 @@ def test_desktop_composer_actions_are_inside_prompt_card() -> None:
     assert "composer-actions" in composer_match.group("body")
     assert "right-tools" in composer_match.group("body")
     assert "attachButton" in composer_match.group("body")
+    assert 'id="model" type="button" data-family="default"' in composer_match.group("body")
+    assert 'id="modelLabel">model</span>' in composer_match.group("body")
+    assert "function modelFamily(model, provider)" in html
+    assert "modelButton.dataset.family = modelFamily(state.model, state.provider)" in html
+    assert "document.querySelector('[data-settings-view=\"provider\"]')?.click()" in html
+
+
+def test_desktop_mobile_chat_remains_scrollable_and_model_controls_fit() -> None:
+    html = render_desktop_html()
+
+    assert (
+        ".app.task-running:not(.settings-open) { "
+        "grid-template-columns: minmax(0, 1fr); }"
+    ) in html
+    assert ".stage { padding: 0; overflow-x: hidden; overflow-y: auto;" in html
+    assert ".hero { width: 100%; height: auto; min-height: 100%;" in html
+    assert (
+        ".composer .composer-actions { display: grid; "
+        "grid-template-columns: minmax(0, 1fr);"
+    ) in html
+    assert ".right-tools { width: 100%; min-width: 0; margin-left: 0; display: grid;" in html
+    assert ".model { width: 100%; max-width: none; min-width: 0; }" in html
+    assert '#validateProject::before { content: "✓";' in html
 
 
 def test_desktop_composer_dock_is_bottom_aligned() -> None:
@@ -884,7 +1114,7 @@ def test_desktop_provider_presets_include_openai_official_endpoint(tmp_path: Pat
     assert added["providerProfiles"][0]["displayName"] == "OpenAI"
 
 
-def test_desktop_add_mcp_server_writes_local_config(tmp_path: Path) -> None:
+def test_desktop_add_mcp_server_routes_by_scope(tmp_path: Path) -> None:
     config = RuntimeConfig(
         config_file=tmp_path / "config.json",
         workdir=tmp_path,
@@ -906,20 +1136,55 @@ def test_desktop_add_mcp_server_writes_local_config(tmp_path: Path) -> None:
         }
     )
 
-    saved = json.loads((tmp_path / "mcp.json").read_text(encoding="utf-8"))
+    private_file = project_private_mcp_file(tmp_path, tmp_path)
+    saved = json.loads(private_file.read_text(encoding="utf-8"))
     assert state["mcpAdd"]["ok"] is True
+    assert state["mcpSettings"]["workdir"] == str(tmp_path)
+    assert state["mcpSettings"]["servers"][0]["sourceScope"] == "project-private"
+    assert state["mcpSettings"]["servers"][0]["configFile"] == str(private_file)
     assert saved["mcpServers"]["chrome-devtools"]["command"] == "npx"
     assert saved["mcpServers"]["chrome-devtools"]["args"] == ["chrome-devtools-mcp@latest"]
     assert saved["mcpServers"]["chrome-devtools"]["env"] == {"CHROME_TOKEN": ""}
 
-    disabled = app.toggle_mcp_server({"name": "chrome-devtools", "enabled": False})
-    saved_disabled = json.loads((tmp_path / "mcp.json").read_text(encoding="utf-8"))
+    shared = app.add_mcp_server(
+        {
+            "name": "repo-docs",
+            "scope": "project-shared",
+            "transport": "streamable-http",
+            "url": "https://example.com/mcp",
+        }
+    )
+    user = app.add_mcp_server(
+        {
+            "name": "global-search",
+            "scope": "user",
+            "transport": "sse",
+            "url": "https://search.example.com/sse",
+        }
+    )
+    shared_file = project_shared_mcp_file(tmp_path)
+    user_file = tmp_path / "mcp.json"
+
+    assert shared["mcpAdd"]["ok"] is True
+    assert user["mcpAdd"]["ok"] is True
+    assert "repo-docs" in json.loads(shared_file.read_text(encoding="utf-8"))["mcpServers"]
+    assert "global-search" in json.loads(user_file.read_text(encoding="utf-8"))["mcpServers"]
+
+    disabled = app.toggle_mcp_server(
+        {"name": "chrome-devtools", "configFile": str(private_file), "enabled": False}
+    )
+    saved_disabled = json.loads(private_file.read_text(encoding="utf-8"))
     assert disabled["mcpSave"]["ok"] is True
     assert saved_disabled["mcpServers"]["chrome-devtools"]["enabled"] is False
-    assert disabled["mcpSettings"]["servers"][0]["status"] == "Disabled"
+    private_server = next(
+        server
+        for server in disabled["mcpSettings"]["servers"]
+        if server["name"] == "chrome-devtools"
+    )
+    assert private_server["status"] == "Disabled"
 
-    deleted = app.delete_mcp_server({"name": "chrome-devtools"})
-    saved_deleted = json.loads((tmp_path / "mcp.json").read_text(encoding="utf-8"))
+    deleted = app.delete_mcp_server({"name": "chrome-devtools", "configFile": str(private_file)})
+    saved_deleted = json.loads(private_file.read_text(encoding="utf-8"))
     assert deleted["mcpSave"]["ok"] is True
     assert "chrome-devtools" not in saved_deleted["mcpServers"]
 
@@ -982,6 +1247,7 @@ def test_desktop_general_settings_are_validated_and_persisted(tmp_path: Path) ->
     assert state["generalSettings"]["dataDirMode"] == "portable"
     reloaded = RuntimeConfig.load(config_file=config_file, workdir=tmp_path)
     assert reloaded.desktop_theme == "classic"
+    assert reloaded.desktop_language == "zh-CN"
     assert reloaded.desktop_reply_language == "zh-CN"
     assert reloaded.desktop_output_style == "review"
     assert reloaded.desktop_thinking_enabled is False
@@ -1025,9 +1291,35 @@ def test_desktop_general_settings_reject_invalid_payload(tmp_path: Path) -> None
             "notificationsEnabled": False,
         }
     )
+    invalid_display_language = app.save_general_settings(
+        {
+            "requireCommandApproval": True,
+            "sendMode": "modifier-enter",
+            "uiScale": 100,
+            "notificationsEnabled": False,
+            "language": "ja",
+            "replyLanguage": "ja",
+        }
+    )
 
     assert invalid_mode["generalSave"]["ok"] is False
     assert invalid_scale["generalSave"]["ok"] is False
+    assert invalid_display_language["generalSave"]["ok"] is False
+
+
+def test_desktop_legacy_partial_display_languages_fall_back_but_reply_language_is_preserved(
+    tmp_path: Path,
+) -> None:
+    config_file = tmp_path / "config.json"
+    config_file.write_text(
+        json.dumps({"desktop_language": "ja", "desktop_reply_language": "ja"}),
+        encoding="utf-8",
+    )
+
+    loaded = RuntimeConfig.load(config_file=config_file, workdir=tmp_path)
+
+    assert loaded.desktop_language == "zh-CN"
+    assert loaded.desktop_reply_language == "ja"
 
 
 def test_desktop_h5_settings_are_validated_and_persisted(tmp_path: Path) -> None:
@@ -1096,6 +1388,158 @@ def test_desktop_h5_settings_reject_invalid_payload(tmp_path: Path) -> None:
 
     assert invalid_port["h5Save"]["ok"] is False
     assert invalid_keepalive["h5Save"]["ok"] is False
+
+
+def test_desktop_h5_pairing_is_one_time_and_revocable(tmp_path: Path) -> None:
+    config_file = tmp_path / "config.json"
+    config = RuntimeConfig(
+        config_file=config_file,
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+        desktop_h5_enabled=True,
+        desktop_h5_host="0.0.0.0",
+    )
+    config.save()
+    app = DesktopApp(config)
+    app.desktop_host = "0.0.0.0"
+    app.desktop_port = 8765
+
+    pairing = app.create_h5_pairing()
+
+    assert pairing["h5Pairing"]["ok"] is True
+    pairing_url = urlparse(pairing["h5Pairing"]["url"])
+    token = parse_qs(pairing_url.query)["h5_token"][0]
+    assert token
+    assert token not in config_file.read_text(encoding="utf-8")
+    assert app._h5_pairing_digest != token
+    assert pairing["h5Access"]["pairingPending"] is True
+    assert pairing["h5Access"]["activeSessions"] == 0
+
+    session_token = app.consume_h5_pairing(token)
+
+    assert session_token
+    assert app.consume_h5_pairing(token) is None
+    assert app.validate_h5_session(session_token) is True
+    assert app._h5_access_state()["pairingPending"] is False
+    assert app._h5_access_state()["activeSessions"] == 1
+
+    revoked = app.revoke_h5_access()
+
+    assert revoked["h5Revoke"]["ok"] is True
+    assert revoked["h5Access"]["activeSessions"] == 0
+    assert app.validate_h5_session(session_token) is False
+
+
+def test_desktop_h5_pairing_requires_active_lan_listener(tmp_path: Path) -> None:
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+        desktop_h5_enabled=True,
+        desktop_h5_host="0.0.0.0",
+    )
+    app = DesktopApp(config)
+    app.desktop_host = "127.0.0.1"
+    app.desktop_port = 8765
+
+    pairing = app.create_h5_pairing()
+
+    assert pairing["h5Pairing"]["ok"] is False
+    assert pairing["h5Pairing"]["url"] == ""
+    assert pairing["h5Access"]["remoteReady"] is False
+
+
+def test_desktop_h5_remote_http_exchanges_token_for_cookie(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+        desktop_h5_enabled=True,
+        desktop_h5_host="0.0.0.0",
+    )
+    app = DesktopApp(config)
+    server = _create_server("127.0.0.1", 0, _handler_for(app))
+    app.desktop_host = "0.0.0.0"
+    app.desktop_port = server.server_port
+    monkeypatch.setattr(desktop_module, "_is_loopback_address", lambda _value: False)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    base_url = f"http://127.0.0.1:{server.server_port}"
+
+    try:
+        with pytest.raises(HTTPError) as denied:
+            urlopen(f"{base_url}/api/state", timeout=3)
+        assert denied.value.code == 403
+        assert "一次性安全链接" in denied.value.read().decode("utf-8")
+
+        pairing = app.create_h5_pairing()["h5Pairing"]
+        pairing_query = urlparse(pairing["url"]).query
+        cookie_jar = CookieJar()
+        opener = build_opener(HTTPCookieProcessor(cookie_jar))
+
+        with opener.open(f"{base_url}/?{pairing_query}", timeout=3) as response:
+            assert response.status == 200
+            assert "cat-agentic" in response.read().decode("utf-8")
+
+        cookie = next(iter(cookie_jar))
+        assert cookie.name == "cat_agentic_h5"
+        assert cookie.has_nonstandard_attr("HttpOnly")
+        assert cookie.get_nonstandard_attr("SameSite") == "Strict"
+
+        with opener.open(f"{base_url}/api/state", timeout=3) as response:
+            state = json.loads(response.read().decode("utf-8"))
+        assert state["h5Access"]["activeSessions"] == 1
+        assert state["h5Access"]["pairingPending"] is False
+
+        with pytest.raises(HTTPError) as reused:
+            urlopen(f"{base_url}/?{pairing_query}", timeout=3)
+        assert reused.value.code == 403
+        assert "需要安全访问链接" in reused.value.read().decode("utf-8")
+
+        local_only_request = Request(
+            f"{base_url}/api/h5/pairing/create",
+            data=b"{}",
+            headers={"content-type": "application/json"},
+            method="POST",
+        )
+        with pytest.raises(HTTPError) as local_only:
+            opener.open(local_only_request, timeout=3)
+        assert local_only.value.code == 403
+
+        app.revoke_h5_access()
+        with pytest.raises(HTTPError) as revoked:
+            opener.open(f"{base_url}/api/state", timeout=3)
+        assert revoked.value.code == 403
+    finally:
+        server.shutdown()
+        thread.join(timeout=3)
+        server.server_close()
+
+
+def test_desktop_h5_denied_page_does_not_echo_tokens() -> None:
+    html = render_h5_access_denied_html()
+
+    assert "需要安全访问链接" in html
+    assert "h5_token" not in html
+    assert "一次性" in html
+
+
+def test_desktop_h5_lan_address_prefers_rfc1918_networks() -> None:
+    assert desktop_module._is_rfc1918_ipv4("192.168.100.167") is True
+    assert desktop_module._is_rfc1918_ipv4("10.0.0.8") is True
+    assert desktop_module._is_rfc1918_ipv4("172.16.20.4") is True
+    assert desktop_module._is_rfc1918_ipv4("198.18.0.1") is False
 
 
 def test_desktop_mcp_settings_read_config_without_secret_values(tmp_path: Path) -> None:
@@ -1190,6 +1634,77 @@ def test_desktop_terminal_settings_reports_runtime_and_probe(tmp_path: Path) -> 
     assert f"cwd: {tmp_path}" in probe["output"]
 
 
+def test_desktop_computer_use_reports_real_prerequisites(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(desktop_module.sys, "platform", "darwin")
+    monkeypatch.setattr(desktop_module, "_macos_accessibility_permission", lambda: True)
+    monkeypatch.setattr(desktop_module, "_macos_screen_recording_permission", lambda: False)
+    monkeypatch.setattr(
+        desktop_module,
+        "_first_executable",
+        lambda *candidates: f"/mock/{Path(candidates[0]).name}",
+    )
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+
+    computer_use = app._computer_use_settings_state()
+    capabilities = {item["id"]: item for item in computer_use["capabilities"]}
+
+    assert computer_use["platform"] == "macOS"
+    assert computer_use["ready"] is False
+    assert computer_use["permissionState"] == "action-required"
+    assert capabilities["python"]["status"] == "ready"
+    assert capabilities["accessibility"]["status"] == "granted"
+    assert capabilities["accessibility"]["detailKey"] == "computerPermissionGrantedDetail"
+    assert capabilities["screen-recording"]["status"] == "action-required"
+    assert capabilities["screen-recording"]["detailKey"] == "computerPermissionRequiredDetail"
+    assert capabilities["screen-recording"]["settingsPane"] == "screen-recording"
+    assert capabilities["browser"]["detail"] == "/mock/chromium"
+
+
+def test_desktop_computer_use_opens_allowlisted_macos_settings(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened: list[tuple[list[str], dict[str, Any]]] = []
+
+    def fake_popen(args: list[str], **kwargs: Any) -> object:
+        opened.append((args, kwargs))
+        return object()
+
+    monkeypatch.setattr(desktop_module.sys, "platform", "darwin")
+    monkeypatch.setattr(desktop_module, "_first_executable", lambda *_candidates: "/usr/bin/open")
+    monkeypatch.setattr(desktop_module.subprocess, "Popen", fake_popen)
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+
+    result = app.open_computer_use_settings({"pane": "accessibility"})
+    invalid = app.open_computer_use_settings({"pane": "other"})
+
+    assert result["ok"] is True
+    assert opened[0][0] == [
+        "/usr/bin/open",
+        "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+    ]
+    assert opened[0][1]["start_new_session"] is True
+    assert invalid["ok"] is False
+    assert len(opened) == 1
+
+
 def test_desktop_agents_settings_reports_builtin_roles(tmp_path: Path) -> None:
     config = RuntimeConfig(
         config_file=tmp_path / "config.json",
@@ -1256,6 +1771,46 @@ def test_desktop_skills_settings_read_local_skill_summaries(tmp_path: Path) -> N
     assert "full body should not be returned" not in json.dumps(skills)
 
 
+def test_desktop_skill_preview_is_bounded_redacted_and_path_scoped(tmp_path: Path) -> None:
+    skills_dir = tmp_path / "skills"
+    skill_path = skills_dir / "coding" / "review.md"
+    skill_path.parent.mkdir(parents=True)
+    secret = "sk-local-skill-secret-123456"
+    skill_path.write_text(
+        "\n".join(
+            [
+                "name: code-review",
+                "description: Review code changes for regressions.",
+                "",
+                "# Local preview",
+                f"api_key={secret}",
+                "This body is available only through the bounded preview endpoint.",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=skills_dir,
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+    skill = app.state()["skillsSettings"]["skills"][0]
+
+    preview = app.skill_preview(skill["id"])
+
+    assert preview["ok"] is True
+    assert preview["skill"]["relativePath"] == "coding/review.md"
+    assert "path" not in preview["skill"]
+    assert secret not in preview["content"]
+    assert "api_key=[REDACTED]" in preview["content"]
+    assert "bounded preview endpoint" in preview["content"]
+    assert app.skill_preview("skill-does-not-exist")["ok"] is False
+
+
 def test_desktop_extended_settings_read_local_status(tmp_path: Path) -> None:
     config_dir = tmp_path / "config"
     plugin_dir = config_dir / "plugins" / "cache" / "example-plugin"
@@ -1264,7 +1819,20 @@ def test_desktop_extended_settings_read_local_status(tmp_path: Path) -> None:
         "name: demo\n\n# Demo\n",
         encoding="utf-8",
     )
-    (plugin_dir / "plugin.json").write_text('{"name":"example-plugin"}\n', encoding="utf-8")
+    (plugin_dir / "plugin.json").write_text(
+        json.dumps(
+            {
+                "displayName": "Example Plugin",
+                "name": "example-plugin",
+                "description": "Indexes demo skills and MCP entrypoints.",
+                "version": "1.2.3",
+                "homepage": "https://example.com/plugin",
+                "apiKey": "sk-plugin-secret-123456",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     trace_dir = config_dir / "traces"
     trace_dir.mkdir(parents=True)
     (trace_dir / "run.jsonl").write_text('{"event":"ok"}\n', encoding="utf-8")
@@ -1291,15 +1859,34 @@ def test_desktop_extended_settings_read_local_status(tmp_path: Path) -> None:
     assert plugins["ok"] is True
     assert plugins["total"] == 1
     assert plugins["withSkills"] == 1
-    assert plugins["plugins"][0]["name"] == "example-plugin"
+    assert plugins["plugins"][0]["name"] == "Example Plugin"
+    assert plugins["plugins"][0]["directoryName"] == "example-plugin"
+    assert plugins["plugins"][0]["description"] == "Indexes demo skills and MCP entrypoints."
+    assert plugins["plugins"][0]["version"] == "1.2.3"
+    assert plugins["plugins"][0]["homepage"] == "https://example.com/plugin"
+    assert plugins["plugins"][0]["manifest"].endswith("plugin.json")
     assert str(Path.home() / ".codex") not in json.dumps(plugins)
+
+    plugin_preview = app.plugin_preview(plugins["plugins"][0]["id"])
+    assert plugin_preview["ok"] is True
+    assert plugin_preview["plugin"]["relativePath"] == "example-plugin"
+    assert "path" not in plugin_preview["plugin"]
+    assert "sk-plugin-secret-123456" not in plugin_preview["manifestContent"]
+    assert "[REDACTED]" in plugin_preview["manifestContent"]
+    assert "skills/demo/SKILL.md" in {item["path"] for item in plugin_preview["files"]}
+    assert len(plugin_preview["skills"]) == 1
+    assert plugin_preview["skills"][0]["name"] == "demo"
+    assert app.plugin_preview("plugin-does-not-exist")["ok"] is False
 
     computer_use = state["computerUseSettings"]
     assert computer_use["ok"] is True
-    assert computer_use["total"] == 3
+    assert computer_use["total"] == 6
     assert {item["name"] for item in computer_use["capabilities"]} == {
-        "屏幕截图",
-        "桌面自动化",
+        "Python 运行时",
+        "虚拟环境",
+        "本机工具链",
+        "辅助功能权限",
+        "屏幕录制权限",
         "浏览器控制",
     }
 
@@ -1320,6 +1907,318 @@ def test_desktop_extended_settings_read_local_status(tmp_path: Path) -> None:
     assert {item["name"] for item in diagnostics["checks"]}.issuperset(
         {"工作目录", "配置文件", "会话目录", "MCP 配置", "Skills 索引", "插件索引"}
     )
+
+
+def test_desktop_marketplace_catalog_normalizes_public_manifest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    payload = json.dumps(
+        {
+            "name": "demo-marketplace",
+            "metadata": {"version": "1.0.0", "description": "Public demo catalog."},
+            "plugins": [
+                {
+                    "name": "demo-plugin",
+                    "version": "2.1.0",
+                    "description": "Preview-only demo plugin.",
+                    "author": {"name": "Demo Author", "email": "author@example.com"},
+                    "source": "./plugins/demo-plugin",
+                    "skills": ["./skills/demo"],
+                    "apiKey": "sk-marketplace-secret-123456",
+                }
+            ],
+        }
+    ).encode("utf-8")
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self, _limit: int) -> bytes:
+            return payload
+
+    monkeypatch.setattr(desktop_module, "urlopen", lambda _request, timeout: FakeResponse())
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    catalog = DesktopApp(config).marketplace_catalog("anthropic-agent-skills")
+
+    assert catalog["ok"] is True
+    assert catalog["sourceId"] == "anthropic-agent-skills"
+    assert catalog["sourceUrl"].endswith("/.claude-plugin/marketplace.json")
+    assert catalog["trustState"] == "public-unverified"
+    assert catalog["installState"] == "preview-only"
+    assert catalog["executeState"] == "disabled"
+    assert catalog["verification"] == {
+        "contentSha256": hashlib.sha256(payload).hexdigest(),
+        "contentBytes": len(payload),
+        "fetchedAt": catalog["fetchedAt"],
+        "sourceRevision": "main",
+        "sourceRevisionState": "mutable",
+        "signatureState": "not-verified",
+    }
+    assert catalog["permissionReview"] == {
+        "state": "required",
+        "scope": "catalog-metadata-only",
+        "installState": "blocked",
+        "downloadState": "disabled",
+        "localWriteState": "disabled",
+        "executionState": "disabled",
+    }
+    assert catalog["total"] == 1
+    assert catalog["plugins"][0]["name"] == "demo-plugin"
+    assert catalog["plugins"][0]["version"] == "2.1.0"
+    assert catalog["plugins"][0]["skillCount"] == 1
+    assert "apiKey" not in json.dumps(catalog)
+    assert DesktopApp(config).marketplace_catalog("not-allowed")["ok"] is False
+
+    def fail_request(*_args: object, **_kwargs: object) -> None:
+        raise OSError("request token=sk-marketplace-secret-123456")
+
+    monkeypatch.setattr(desktop_module, "urlopen", fail_request)
+    failed_catalog = DesktopApp(config).marketplace_catalog("anthropic-agent-skills")
+    assert failed_catalog["ok"] is False
+    assert "sk-marketplace-secret-123456" not in failed_catalog["message"]
+    assert "[REDACTED]" in failed_catalog["message"]
+
+
+def test_desktop_update_check_reads_bounded_github_release(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    payload = json.dumps(
+        {"tag_name": "v0.18.0", "published_at": "2026-07-13T08:00:00Z"}
+    ).encode("utf-8")
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def read(self, limit: int) -> bytes:
+            assert limit == desktop_module.UPDATE_CHECK_MAX_BYTES + 1
+            return payload
+
+    monkeypatch.setattr(desktop_module, "urlopen", lambda _request, timeout: FakeResponse())
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+
+    result = DesktopApp(config).check_for_updates()
+
+    assert result["ok"] is True
+    assert result["installedVersion"] == "0.17.0"
+    assert result["latestVersion"] == "0.18.0"
+    assert result["updateAvailable"] is True
+    assert result["versionState"] == "update-available"
+    assert result["releaseUrl"].endswith("/releases/tag/v0.18.0")
+
+
+def test_desktop_update_check_reports_redacted_network_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    def fail_request(*_args: object, **_kwargs: object) -> None:
+        raise OSError("request token=sk-update-secret-123456")
+
+    monkeypatch.setattr(desktop_module, "urlopen", fail_request)
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+
+    result = DesktopApp(config).check_for_updates()
+
+    assert result["ok"] is False
+    assert result["installedVersion"] == "0.17.0"
+    assert result["releaseUrl"].endswith("/releases")
+    assert "sk-update-secret-123456" not in result["error"]
+    assert "[REDACTED]" in result["error"]
+
+
+def test_desktop_token_usage_groups_sessions_by_day_and_range(tmp_path: Path) -> None:
+    config = RuntimeConfig(
+        config_file=tmp_path / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+    local_now = datetime.now().astimezone().replace(hour=12, minute=0, second=0, microsecond=0)
+    fixtures = [
+        (
+            "today-session",
+            local_now,
+            [
+                {"role": "user", "content": "a" * 40},
+                {"role": "assistant", "content": "b" * 20},
+            ],
+        ),
+        (
+            "yesterday-session",
+            local_now - timedelta(days=1),
+            [{"role": "user", "content": "c" * 80}],
+        ),
+        (
+            "older-session",
+            local_now - timedelta(days=45),
+            [{"role": "user", "content": "d" * 120}],
+        ),
+    ]
+    for session_id, updated_at, messages in fixtures:
+        app.sessions.path_for(session_id).write_text(
+            json.dumps(
+                {
+                    "session_id": session_id,
+                    "updated_at": updated_at.isoformat(),
+                    "messages": messages,
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    month = app._token_usage_settings_state(30)
+    quarter = app._token_usage_settings_state(90)
+    fallback = app._token_usage_settings_state(7)
+
+    assert month["periodDays"] == 30
+    assert month["sessionCount"] == 2
+    assert month["messageCount"] == 3
+    assert month["estimatedTokens"] == 35
+    assert month["today"] == {"sessions": 1, "messages": 2, "estimatedTokens": 15}
+    assert month["yesterday"] == {"sessions": 1, "messages": 1, "estimatedTokens": 20}
+    assert month["last30Days"]["estimatedTokens"] == 35
+    assert len(month["daily"]) == 30
+    assert sum(item["sessions"] for item in month["daily"]) == 2
+    assert {item["level"] for item in month["daily"] if item["estimatedTokens"]} <= {1, 2, 3, 4}
+    assert [item["id"] for item in month["items"]] == [
+        "today-session",
+        "yesterday-session",
+    ]
+    assert "content" not in json.dumps(month)
+
+    assert quarter["periodDays"] == 90
+    assert quarter["sessionCount"] == 3
+    assert quarter["estimatedTokens"] == 65
+    assert fallback["periodDays"] == 365
+    assert len(fallback["daily"]) == 365
+
+
+def test_desktop_trace_records_events_and_redacts_secrets(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret = "sk-ant-trace-secret-123456"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", secret)
+    config = RuntimeConfig(
+        config_file=tmp_path / "config" / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+        desktop_trace_enabled=True,
+    )
+    app = DesktopApp(config)
+    app._record_agent_event(
+        AgentEvent(
+            kind="tool_call",
+            name="write_file",
+            content=f"authorization={secret}",
+            arguments={"path": "secret.txt", "content": secret},
+        )
+    )
+
+    trace = app._trace_settings_state()
+
+    assert trace["total"] == 1
+    assert trace["files"][0]["name"].endswith(".jsonl")
+    raw = Path(trace["files"][0]["path"]).read_text(encoding="utf-8")
+    assert secret not in raw
+    assert "[REDACTED]" in raw
+    assert '"argumentKeys": ["content", "path"]' in raw
+    assert "secret.txt" not in raw
+
+    preview = app.trace_preview(trace["files"][0]["id"])
+    assert preview["ok"] is True
+    assert secret not in preview["content"]
+    assert "[REDACTED]" in preview["content"]
+
+
+def test_desktop_trace_respects_disabled_setting(tmp_path: Path) -> None:
+    config = RuntimeConfig(
+        config_file=tmp_path / "config" / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+        desktop_trace_enabled=False,
+    )
+    app = DesktopApp(config)
+
+    app._record_agent_event(AgentEvent(kind="assistant", content="not persisted"))
+
+    assert app._trace_settings_state()["total"] == 0
+    assert not (config.config_file.parent / "traces").exists()
+
+
+def test_desktop_trace_open_and_diagnostics_export_use_fixed_local_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    secret = "sk-ant-diagnostics-secret-123456"
+    monkeypatch.setenv("ANTHROPIC_API_KEY", secret)
+    config = RuntimeConfig(
+        config_file=tmp_path / "config" / "config.json",
+        workdir=tmp_path,
+        sessions_dir=tmp_path / "sessions",
+        skills_dir=tmp_path / "skills",
+        hooks_dir=tmp_path / "hooks",
+        mcp_config_file=tmp_path / "mcp.json",
+    )
+    app = DesktopApp(config)
+    opened: list[Path] = []
+
+    def fake_open(path: Path) -> tuple[bool, str]:
+        opened.append(path)
+        return True, f"opened {path}"
+
+    monkeypatch.setattr(desktop_module, "_open_local_directory", fake_open)
+
+    opened_result = app.open_trace_directory()
+    exported = app.export_diagnostics_report()
+
+    trace_dir = config.config_file.parent / "traces"
+    assert opened_result["ok"] is True
+    assert opened == [trace_dir]
+    assert trace_dir.is_dir()
+    assert exported["ok"] is True
+    report_path = Path(exported["path"])
+    assert report_path.parent == config.config_file.parent / "diagnostics"
+    report = report_path.read_text(encoding="utf-8")
+    assert secret not in report
+    assert "API key value: [NOT EXPORTED]" in report
+    assert "message bodies" in report
 
 
 def test_desktop_memory_settings_read_local_memory_summaries(tmp_path: Path) -> None:

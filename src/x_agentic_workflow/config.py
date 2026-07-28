@@ -51,8 +51,11 @@ class RuntimeConfig:
     hooks_dir: Path = field(default_factory=lambda: DEFAULT_CONFIG_DIR / "hooks")
     mcp_config_file: Path = field(default_factory=lambda: DEFAULT_CONFIG_DIR / "mcp.json")
     recent_projects: list[str] = field(default_factory=list)
-    desktop_theme: Literal["pure", "classic", "dark"] = "pure"
-    desktop_language: Literal["en", "zh-CN", "zh-TW", "ja", "ko"] = "zh-CN"
+    desktop_theme: Literal["pure", "classic", "dark", "ocean", "comic"] = "ocean"
+    # Display languages are intentionally limited to the two complete UI bundles.
+    # Reply-language preferences remain independent below and may use model-supported
+    # languages without implying that the desktop chrome is translated.
+    desktop_language: Literal["en", "zh-CN"] = "zh-CN"
     desktop_reply_language: Literal["default", "en", "zh-CN", "zh-TW", "ja", "ko"] = "default"
     desktop_output_style: Literal["default", "concise", "explanatory", "review"] = "default"
     desktop_permission_mode: Literal["ask", "skip"] = "ask"
@@ -152,14 +155,14 @@ class RuntimeConfig:
                 if isinstance(raw, str) and raw.strip()
             ][:8],
             desktop_theme=cast(
-                Literal["pure", "classic", "dark"],
-                desktop_theme if desktop_theme in {"pure", "classic", "dark"} else "pure",
+                Literal["pure", "classic", "dark", "ocean", "comic"],
+                desktop_theme
+                if desktop_theme in {"pure", "classic", "dark", "ocean", "comic"}
+                else "ocean",
             ),
             desktop_language=cast(
-                Literal["en", "zh-CN", "zh-TW", "ja", "ko"],
-                desktop_language
-                if desktop_language in {"en", "zh-CN", "zh-TW", "ja", "ko"}
-                else "zh-CN",
+                Literal["en", "zh-CN"],
+                desktop_language if desktop_language in {"en", "zh-CN"} else "zh-CN",
             ),
             desktop_reply_language=cast(
                 Literal["default", "en", "zh-CN", "zh-TW", "ja", "ko"],

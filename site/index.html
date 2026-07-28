@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="cat-agentic 是本地优先、BYOK、可审批的 AI 编码工作区。">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml">
+  <title>cat-agentic · 本地 AI 编码工作区</title>
+  <style>
+    :root {
+      --ink: #171b24;
+      --muted: #667085;
+      --subtle: #8b95a5;
+      --line: #e1e6ed;
+      --soft: #f6f8fb;
+      --accent: #b65f47;
+      --accent-hover: #974832;
+      --accent-soft: #fff0ea;
+      --blue: #326ed3;
+      --blue-soft: #edf4ff;
+      --green: #16825d;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; min-width: 320px; background: #fff; color: var(--ink); }
+    a { color: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      height: 64px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .96);
+      backdrop-filter: blur(16px);
+    }
+
+    .nav {
+      width: min(1180px, calc(100% - 40px));
+      height: 100%;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      gap: 26px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      justify-self: start;
+      text-decoration: none;
+      font-size: 18px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      width: 31px;
+      height: 31px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #dfe5ec;
+      border-radius: 8px;
+      background: #fff;
+      color: var(--accent);
+      font-size: 17px;
+      font-weight: 860;
+      box-shadow: 0 5px 16px rgba(23, 27, 36, .08);
+    }
+    .brand em { color: var(--accent); font-style: normal; }
+
+    .nav-center, .nav-actions { display: flex; align-items: center; gap: 4px; }
+    .nav-actions { justify-self: end; gap: 7px; }
+    .nav-link {
+      min-height: 40px;
+      padding: 0 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border-radius: 7px;
+      color: #526071;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    .nav-link:hover, .nav-link.active { color: var(--accent); background: var(--accent-soft); }
+    .nav-link.download { min-width: 92px; background: var(--accent); color: #fff; }
+    .nav-link.download:hover { background: var(--accent-hover); }
+
+    .hero {
+      position: relative;
+      min-height: calc(100vh - 64px);
+      padding: 86px 20px 0;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      background: #fff;
+    }
+
+    .hero-content { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; }
+    .status-pill {
+      min-height: 34px;
+      padding: 7px 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid #eccabd;
+      border-radius: 7px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 720;
+    }
+    .status-pill-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+    h1 {
+      margin: 28px 0 0;
+      font-size: 64px;
+      line-height: 1.08;
+      letter-spacing: 0;
+      font-weight: 860;
+    }
+    h1 .accent-line { display: block; margin-top: 6px; color: var(--accent); }
+
+    .hero-copy {
+      max-width: 780px;
+      margin: 26px 0 0;
+      color: var(--muted);
+      font-size: 18px;
+      line-height: 1.7;
+    }
+
+    .hero-actions { margin-top: 28px; display: flex; align-items: center; justify-content: center; gap: 12px; }
+    .button {
+      min-height: 50px;
+      padding: 0 20px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      border: 1px solid var(--ink);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--ink);
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 760;
+      box-shadow: 0 6px 16px rgba(23, 27, 36, .06);
+    }
+    .button.primary { border-color: var(--accent); background: var(--accent); color: #fff; box-shadow: 0 8px 18px rgba(182, 95, 71, .22); }
+    .button.primary:hover { border-color: var(--accent-hover); background: var(--accent-hover); }
+    .button.secondary:hover { background: var(--soft); }
+    .button:focus-visible, .nav-link:focus-visible { outline: 3px solid rgba(50, 110, 211, .24); outline-offset: 2px; }
+
+    .trust-row {
+      margin-top: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 20px 28px;
+      color: #617084;
+      font-size: 13px;
+      font-weight: 590;
+    }
+    .trust-item { display: inline-flex; align-items: center; gap: 8px; }
+    .trust-icon { color: var(--blue); font-size: 17px; font-weight: 850; }
+
+    .hero-preview-wrap {
+      position: relative;
+      z-index: 1;
+      width: min(1120px, calc(100% - 24px));
+      margin: 62px auto -180px;
+    }
+    .hero-preview {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      object-position: top;
+      border: 1px solid #cad2dc;
+      border-radius: 8px 8px 0 0;
+      background: var(--soft);
+      box-shadow: 0 28px 75px rgba(29, 38, 52, .14);
+    }
+
+    .band { padding: 92px 20px; }
+    .band.soft { background: var(--soft); }
+    .band-inner { width: min(1120px, 100%); margin: 0 auto; }
+    .section-kicker { color: var(--accent); font-size: 13px; font-weight: 760; }
+    .section-title { max-width: 720px; margin: 12px 0 0; font-size: 38px; line-height: 1.22; font-weight: 830; }
+    .section-copy { max-width: 720px; margin: 16px 0 0; color: var(--muted); font-size: 16px; line-height: 1.7; }
+
+    .capability-grid {
+      margin-top: 38px;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .capability-card {
+      min-height: 190px;
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .capability-icon {
+      width: 40px;
+      height: 40px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 17px;
+      font-weight: 850;
+    }
+    .capability-card h3 { margin: 20px 0 0; font-size: 19px; line-height: 1.3; font-weight: 790; }
+    .capability-card p { margin: 10px 0 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
+
+    .workflow {
+      display: grid;
+      grid-template-columns: .78fr 1.22fr;
+      gap: 70px;
+      align-items: start;
+    }
+    .workflow-list { display: grid; gap: 0; border-top: 1px solid var(--line); }
+    .workflow-step { padding: 22px 0; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 14px; border-bottom: 1px solid var(--line); }
+    .step-number { color: var(--accent); font-size: 13px; font-weight: 820; }
+    .workflow-step h3 { margin: 0; font-size: 17px; font-weight: 780; }
+    .workflow-step p { margin: 7px 0 0; color: var(--muted); font-size: 14px; line-height: 1.6; }
+
+    .download-band { padding: 76px 20px; background: #171b24; color: #fff; }
+    .download-inner { width: min(1120px, 100%); margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 32px; }
+    .download-inner h2 { margin: 0; font-size: 34px; line-height: 1.25; font-weight: 820; }
+    .download-inner p { margin: 12px 0 0; max-width: 640px; color: #b8c0cc; font-size: 15px; line-height: 1.6; }
+    .download-inner .button.primary { flex: 0 0 auto; background: #fff; border-color: #fff; color: var(--ink); box-shadow: none; }
+    .download-inner .button.primary:hover { background: #eef1f5; border-color: #eef1f5; }
+
+    footer {
+      min-height: 96px;
+      padding: 26px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .footer-inner { width: min(1120px, 100%); margin: 0 auto; display: flex; align-items: center; justify-content: space-between; gap: 20px; }
+    .footer-links { display: flex; gap: 18px; }
+
+    @media (max-width: 900px) {
+      .nav { grid-template-columns: 1fr auto; }
+      .nav-center { display: none; }
+      .hero { padding-top: 70px; }
+      h1 { font-size: 52px; }
+      .hero-preview-wrap { margin-top: 50px; }
+      .capability-grid { grid-template-columns: minmax(0, 1fr); }
+      .workflow { grid-template-columns: minmax(0, 1fr); gap: 38px; }
+    }
+
+    @media (max-width: 640px) {
+      .site-header { height: 58px; }
+      .nav { width: min(100% - 28px, 1180px); gap: 10px; }
+      .brand { font-size: 16px; }
+      .brand-mark { width: 29px; height: 29px; }
+      .nav-actions .nav-link:not(.download) { display: none; }
+      .nav-link.download { min-width: 80px; min-height: 38px; padding: 0 10px; }
+      .hero { min-height: calc(100vh - 58px); padding: 48px 14px 0; }
+      h1 { margin-top: 22px; font-size: 42px; }
+      .hero-copy { margin-top: 20px; font-size: 15px; }
+      .hero-actions { width: 100%; flex-direction: column; }
+      .button { width: 100%; }
+      .trust-row { margin-top: 24px; gap: 12px 18px; }
+      .hero-preview-wrap { width: calc(100% + 12px); margin-top: 42px; margin-bottom: -70px; }
+      .band { padding: 68px 14px; }
+      .section-title { font-size: 31px; }
+      .capability-card { min-height: 0; }
+      .download-inner { align-items: flex-start; flex-direction: column; }
+      .download-inner h2 { font-size: 29px; }
+      .download-inner .button.primary { width: 100%; }
+      .footer-inner { align-items: flex-start; flex-direction: column; }
+    }
+
+    @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav" aria-label="主导航">
+      <a class="brand" href="./" aria-label="cat-agentic 首页">
+        <span class="brand-mark" aria-hidden="true">C</span>
+        <span>cat-<em>agentic</em></span>
+      </a>
+      <div class="nav-center">
+        <a class="nav-link active" href="./">首页</a>
+        <a class="nav-link" href="#capabilities">能力</a>
+        <a class="nav-link" href="#workflow">工作流</a>
+        <a class="nav-link" href="#security">安全</a>
+      </div>
+      <div class="nav-actions">
+        <a class="nav-link" href="https://github.com/354685856-sn/cat-agentic" target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+        <a class="nav-link download" href="./download/"><span aria-hidden="true">↓</span> 下载</a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-content">
+        <div class="status-pill"><span class="status-pill-dot" aria-hidden="true"></span>v0.17 开发预览 · 本地优先 · BYOK</div>
+        <h1 id="hero-title">cat-agentic<span class="accent-line">本地 AI 编码工作区</span></h1>
+        <p class="hero-copy">把会话、项目、文件变更、命令审批、Skills 与 MCP 放进一个看得见的桌面工作区，让 AI 真正参与日常开发。</p>
+        <div class="hero-actions">
+          <a class="button primary" href="./download/"><span aria-hidden="true">↓</span> 免费下载</a>
+          <a class="button secondary" href="#capabilities">查看能力 <span aria-hidden="true">→</span></a>
+        </div>
+        <div class="trust-row" id="security">
+          <span class="trust-item"><span class="trust-icon" aria-hidden="true">▣</span>项目与会话保存在本机</span>
+          <span class="trust-item"><span class="trust-icon" aria-hidden="true">◇</span>API 密钥由客户自己保管</span>
+          <span class="trust-item"><span class="trust-icon" aria-hidden="true">✓</span>终端命令默认需要审批</span>
+        </div>
+      </div>
+      <div class="hero-preview-wrap">
+        <img class="hero-preview" src="./assets/cat-agentic-workspace.png" alt="cat-agentic 桌面工作区，包含项目、会话、编辑区、命令审批和文件变更">
+      </div>
+    </section>
+
+    <section class="band soft" id="capabilities">
+      <div class="band-inner">
+        <div class="section-kicker">一个工作区，覆盖完整开发过程</div>
+        <h2 class="section-title">不是聊天窗口的放大版，而是可以检查和追踪的本地工作台</h2>
+        <p class="section-copy">每一项能力都连接真实的本地运行时。页面状态、按钮反馈和文件变更都可以被验证。</p>
+        <div class="capability-grid">
+          <article class="capability-card">
+            <div class="capability-icon" aria-hidden="true">▤</div>
+            <h3>多服务商与 BYOK</h3>
+            <p>配置 Anthropic 与 OpenAI 兼容服务商，密钥保留在环境变量中。</p>
+          </article>
+          <article class="capability-card">
+            <div class="capability-icon" aria-hidden="true">⌘</div>
+            <h3>可审批的本机工具</h3>
+            <p>读取、搜索、写入和终端命令都有清楚的状态与人工确认边界。</p>
+          </article>
+          <article class="capability-card">
+            <div class="capability-icon" aria-hidden="true">✦</div>
+            <h3>Skills、MCP 与 Agents</h3>
+            <p>把本地技能、MCP 服务和角色提示统一放进可浏览的设置中心。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="workflow">
+      <div class="band-inner workflow">
+        <div>
+          <div class="section-kicker">日常工作流</div>
+          <h2 class="section-title">从选项目到检查改动，始终留在同一条链路里</h2>
+          <p class="section-copy">客户不需要先理解 Agent 架构，只需要从自己的项目开始。</p>
+        </div>
+        <div class="workflow-list">
+          <article class="workflow-step">
+            <span class="step-number">01</span>
+            <div><h3>选择本地项目</h3><p>验证目录、Git 状态和项目建议，不上传源代码。</p></div>
+          </article>
+          <article class="workflow-step">
+            <span class="step-number">02</span>
+            <div><h3>让 Agent 执行任务</h3><p>模型、工具调用、审批和运行状态都在桌面端可见。</p></div>
+          </article>
+          <article class="workflow-step">
+            <span class="step-number">03</span>
+            <div><h3>检查文件与 Diff</h3><p>在交付前查看实际变更、测试结果和本机会话记录。</p></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="download-band">
+      <div class="download-inner">
+        <div>
+          <h2>先在自己的项目上跑一次</h2>
+          <p>macOS 提供开发预览版；Windows、Linux 和高级用户可以通过 pipx 安装 CLI/TUI。</p>
+        </div>
+        <a class="button primary" href="./download/"><span aria-hidden="true">↓</span> 前往下载页</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="footer-inner">
+      <span>cat-agentic · Clean-room local coding assistant</span>
+      <div class="footer-links">
+        <a href="https://github.com/354685856-sn/cat-agentic" target="_blank" rel="noreferrer">GitHub</a>
+        <a href="https://github.com/354685856-sn/cat-agentic/issues" target="_blank" rel="noreferrer">问题反馈</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
