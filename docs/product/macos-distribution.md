@@ -9,7 +9,7 @@ This project can build a developer-preview macOS DMG:
 The generated file is written to:
 
 ```text
-dist/X-Agentic-Workflow-<version>-macos-preview.dmg
+dist/Cat-Agentic-<version>-macos-preview.dmg
 ```
 
 ## How the preview DMG works
@@ -26,14 +26,29 @@ The app bundle includes a source snapshot under:
 Cat Agentic.app/Contents/Resources/source
 ```
 
-On first launch, the app copies that bundled source into:
+It also includes an offline wheelhouse under:
 
 ```text
-~/Library/Application Support/cat-agentic/source
+Cat Agentic.app/Contents/Resources/wheelhouse
 ```
 
-Then it creates a local `.venv`, installs the local package, starts
-`xaw desktop`, and opens the clean-room local browser UI.
+The normal build uses the declared Hatchling backend. If PyPI is unavailable
+and a previously verified local Cat Agentic app is installed, the build reuses
+that app's dependency wheelhouse and creates the current pure-Python project
+wheel with `scripts/build-offline-wheel.py`. The resulting wheel is installed
+and version-checked during smoke testing.
+
+On first launch, the app creates a versioned persistent runtime under:
+
+```text
+~/Library/Application Support/cat-agentic/runtimes
+```
+
+It installs from the bundled wheelhouse when it matches the available Python,
+starts `cat-agentic desktop`, and opens the clean-room local browser UI. Later
+launches reuse the runtime and an already-running server. If the bundled wheels
+do not match the Mac Python version or architecture, installation falls back to
+the bundled source and the configured Python package index.
 
 The preferred local port is `127.0.0.1:8765`. If another process already uses
 that port, the desktop server falls back to an available local port and opens
@@ -73,7 +88,7 @@ After building the DMG:
 Or pass an explicit DMG path:
 
 ```bash
-./scripts/smoke-macos-preview-dmg.sh dist/X-Agentic-Workflow-0.6.0-macos-preview.dmg
+./scripts/smoke-macos-preview-dmg.sh dist/Cat-Agentic-0.17.0-macos-preview.dmg
 ```
 
 The smoke test mounts the DMG, verifies the app bundle, opens the app, waits for
@@ -103,5 +118,8 @@ Production customer builds should show:
 ## Requirements
 
 - macOS 12+
-- Python 3 available as `python3`
+- Python 3.10 or newer available as `python3`
+- The preview bundles Python dependencies for the build machine but does not yet
+  embed the Python interpreter; a signed production build should bundle a universal
+  runtime or ship separate Intel and Apple Silicon artifacts.
 - User-provided API keys through environment variables or future in-app settings

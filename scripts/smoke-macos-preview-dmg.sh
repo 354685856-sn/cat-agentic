@@ -63,7 +63,7 @@ import sys
 from urllib.request import urlopen
 
 url = sys.argv[1]
-payload = json.loads(urlopen(url + "/api/state", timeout=5).read().decode("utf-8"))
+payload = json.loads(urlopen(url + "/api/state", timeout=20).read().decode("utf-8"))
 print(
     {
         "url": url,

@@ -13,6 +13,25 @@ interfaces.
 Do not copy, translate, or derive implementation details from restricted leaked
 source code. Use `docs/product/clean-room-scope.md` as the boundary document.
 
+## UI alignment rules
+
+- For Cat Agentic UI redesign or polish, use `nange-ui-ux-pro` as the primary
+  product-UI workflow. Use the global `design-taste-frontend` Skill as a
+  secondary anti-template design audit; its upstream scope explicitly excludes
+  dashboards and multi-step product UI, so do not let it turn the workbench into
+  a marketing landing page.
+- Crow5 may be studied only through official/public screenshots and locally
+  visible product behavior. Learn from its scan hierarchy, restrained density,
+  and progressive disclosure; do not copy its assets, strings, colors, source,
+  or internal structure.
+- When the current screen supports it, preserve three scannable product layers:
+  workspace rail, sessions/tasks, and contextual or multi-Agent detail. Surface
+  model selectors, file trees, and task controls only when the current state
+  makes them useful.
+- Every visual change must preserve real backend behavior, Simplified Chinese
+  and English localization, keyboard/accessibility names, and responsive checks
+  at `1128x794` and `390x844`.
+
 Useful commands:
 
 ```bash

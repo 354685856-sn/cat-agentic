@@ -26,6 +26,68 @@ and Claude-style coding assistants, while using original Python code.
   - save provider metadata without storing API key values
   - run a local provider connectivity check
   - redact API keys and token-like values from connection-test errors
+- Desktop themes and localization:
+  - keep the composer, project picker, Worktree controls, inspector, dialogs, and
+    scheduled-task surfaces inside one consistent dark workbench palette
+  - offer only the complete Simplified Chinese and English desktop bundles;
+    Traditional Chinese, Japanese, and Korean remain available as independent
+    model reply-language preferences
+  - rerender shell and dynamic state together when display language changes, so
+    project badges, empty states, tooltips, environment status, and settings copy
+    do not remain in the previous language
+- Desktop About and updates:
+  - show the installed app version and official repository in a dedicated About page
+  - read the latest public GitHub Release through a bounded, read-only local endpoint
+  - distinguish newer, current, and update-available builds without downloading or
+    installing anything automatically
+- Desktop H5 Access:
+  - bind the desktop service to the local network with validated host, port, and
+    disconnect keepalive settings
+  - create a 10-minute, one-time phone link that is exchanged for an HttpOnly,
+    SameSite=Strict session cookie and then immediately invalidated
+  - keep pairing and session token digests in memory only, reject unauthorized
+    remote requests, and let the local desktop revoke all remote access
+- Desktop Skills Browser:
+  - discover project, user, and plugin-local skill summaries with source, size,
+    version, search, and stable server-generated IDs
+  - select a skill to read a bounded local preview through `/api/skills/preview`
+    with root-path validation and local secret redaction
+  - keep third-party install and execution out of this slice until those flows
+    have explicit approval and a separate runtime boundary
+- Desktop Plugin Browser:
+  - select a local plugin card to inspect a bounded, redacted manifest preview,
+    relative file tree, and bundled Skill metadata
+  - use server-generated plugin IDs and root-scoped path validation; plugin
+    detail payloads omit absolute paths and never install or execute code
+- Desktop Marketplace catalog:
+  - read only allowlisted public GitHub Raw `marketplace.json` manifests for
+    Anthropic Agent Skills and Trail of Bits
+  - show source, version, trust, install, and execution states with explicit
+    failure and empty states; this slice never downloads, installs, writes, or
+    executes third-party plugins
+  - expose the fetched byte count, SHA-256 fingerprint, fetch time, mutable source
+    revision, and unverified signature state before any future permission review
+- Desktop Computer Use readiness:
+  - inspect the active Python runtime, virtual environment, local screenshot and
+    automation commands, supported browser path, and macOS Accessibility / Screen
+    Recording permissions
+  - open only the allowlisted macOS privacy settings pane after an explicit user click
+  - keep screenshot, click, and keyboard control inactive until the runtime and system
+    permissions are ready
+- Desktop Token Usage:
+  - aggregate project-local session records into today, yesterday, and recent-30-day
+    summaries
+  - switch the daily trend between 30 days, 90 days, and one year through real API
+    queries
+  - render an accessible calendar heatmap and range-scoped recent sessions
+  - label the character-based local estimate clearly; it is not provider billing
+- Desktop Trace and Diagnostics:
+  - write one local JSONL trace per session when Trace is enabled, while excluding
+    prompt bodies, tool argument values, diffs, and known secret values
+  - browse recent Trace files through a fixed local directory and read a bounded,
+    redacted preview without accepting arbitrary paths from the browser
+  - rerun eight local readiness checks and export a redacted Markdown diagnostics
+    report that omits API key values, messages, file contents, and Trace contents
 - Desktop Project Validation:
   - validate the current project path from the local browser UI
   - report key project files, git state, and recommended verification commands
@@ -137,14 +199,42 @@ For GitHub download / developer-preview use, this repo includes:
 apps/macos/Cat Agentic.app
 ```
 
-On macOS, double-clicking that app bundle prepares `.venv`, installs the local
-package, starts the desktop command, and opens the clean-room browser UI.
+On macOS, double-clicking that app bundle prepares a versioned persistent
+runtime under `~/Library/Application Support/cat-agentic/runtimes`, installs
+from the bundled offline wheelhouse when compatible, starts the desktop
+command, and opens the clean-room browser UI. A second double-click reuses the
+healthy running service instead of starting another server.
+
+The current local preview artifact is
+`dist/Cat-Agentic-0.17.0-macos-preview.dmg`. It requires macOS 12 and a local
+Python 3.10 or newer. The preview is intentionally unsigned and unnotarized;
+public distribution still requires Developer ID signing, hardened runtime,
+notarization, stapling, and an accepted Gatekeeper check.
 
 Details and customer notes:
 [docs/product/macos-app.md](docs/product/macos-app.md)
 
 Preview DMG packaging is documented in:
 [docs/product/macos-distribution.md](docs/product/macos-distribution.md)
+
+## Customer website
+
+The customer-facing homepage and download experience live in `site/`:
+
+- `site/index.html`: product homepage with the real desktop workspace preview
+- `site/download/index.html`: platform downloads, installation help, and release status
+- `.github/workflows/pages.yml`: GitHub Pages deployment from `main`
+
+Preview the site locally:
+
+```bash
+python -m http.server --directory site 8000
+```
+
+The download page reads public GitHub Releases metadata in the browser. It shows
+the newest source release separately from the newest available DMG, falls back to
+the real v0.5.0 preview DMG when the API is unavailable, and uses the published
+`x-agentic-workflow` pipx path for Windows and Linux until native installers exist.
 
 Clean-room product lessons and legal open-source reference planning:
 

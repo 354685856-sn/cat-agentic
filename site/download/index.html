@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="下载 cat-agentic 桌面应用或通过 pipx 安装本地 AI 编码助手。">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+  <title>下载 cat-agentic</title>
+  <style>
+    :root {
+      --ink: #171b24;
+      --muted: #667085;
+      --subtle: #8b95a5;
+      --line: #dfe5ec;
+      --soft: #f5f7fa;
+      --panel: #ffffff;
+      --accent: #b65f47;
+      --accent-hover: #994a36;
+      --accent-soft: #fff1ec;
+      --blue: #2f6fda;
+      --blue-soft: #edf4ff;
+      --success: #16825d;
+      --success-soft: #eaf8f2;
+      --warning: #9b5c00;
+      --warning-soft: #fff7e8;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: #fff;
+    }
+
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; min-width: 320px; background: #fff; color: var(--ink); }
+    a { color: inherit; }
+    button, a { -webkit-tap-highlight-color: transparent; }
+    button { font: inherit; }
+
+    .site-header {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      height: 64px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .96);
+      backdrop-filter: blur(16px);
+    }
+
+    .nav {
+      width: min(1120px, calc(100% - 40px));
+      height: 100%;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 24px;
+    }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+      font-size: 17px;
+      font-weight: 790;
+      white-space: nowrap;
+    }
+
+    .brand-mark {
+      width: 30px;
+      height: 30px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #dfe5ec;
+      border-radius: 8px;
+      background: #fff;
+      color: var(--accent);
+      font-size: 17px;
+      font-weight: 850;
+      box-shadow: 0 4px 14px rgba(23, 27, 36, .08);
+    }
+
+    .brand em { color: var(--accent); font-style: normal; }
+
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+    .nav-link {
+      min-height: 40px;
+      padding: 0 12px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border-radius: 7px;
+      color: #475467;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 650;
+    }
+    .nav-link:hover { background: var(--soft); color: var(--ink); }
+    .nav-link.primary { background: var(--ink); color: #fff; }
+    .nav-link.primary:hover { background: #303643; }
+
+    main { width: min(1120px, calc(100% - 40px)); margin: 0 auto; }
+
+    .hero {
+      min-height: 300px;
+      padding: 76px 0 48px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 18px;
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 760;
+    }
+    .eyebrow-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+
+    h1 {
+      margin: 0;
+      font-size: 48px;
+      line-height: 1.12;
+      letter-spacing: 0;
+      font-weight: 830;
+    }
+
+    .hero-copy {
+      max-width: 680px;
+      margin: 18px auto 0;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.7;
+    }
+
+    .release-status {
+      min-height: 34px;
+      margin-top: 20px;
+      padding: 7px 12px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid #cfe7dc;
+      border-radius: 7px;
+      background: var(--success-soft);
+      color: var(--success);
+      font-size: 13px;
+      font-weight: 680;
+    }
+
+    .release-status.loading { border-color: var(--line); background: var(--soft); color: var(--muted); }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+    .download-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .download-card {
+      position: relative;
+      min-height: 286px;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--soft);
+    }
+
+    .download-card.recommended { border-color: #e2b19f; background: #fffaf8; }
+    .recommended-label {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      padding: 4px 7px;
+      border-radius: 6px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 760;
+      display: none;
+    }
+    .download-card.recommended .recommended-label { display: inline-flex; }
+
+    .platform-icon {
+      width: 44px;
+      height: 44px;
+      display: grid;
+      place-items: center;
+      border: 1px solid #d8e4f8;
+      border-radius: 8px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 19px;
+      font-weight: 820;
+    }
+
+    .download-card h2 { margin: 18px 0 5px; font-size: 20px; line-height: 1.2; font-weight: 790; }
+    .platform-subtitle { min-height: 42px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .artifact-meta { margin-top: 12px; color: var(--subtle); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.5; }
+
+    .card-action {
+      width: 100%;
+      min-height: 44px;
+      margin-top: auto;
+      padding: 0 14px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 1px solid var(--ink);
+      border-radius: 7px;
+      background: var(--ink);
+      color: #fff;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 750;
+      cursor: pointer;
+    }
+    .card-action:hover { background: #303643; border-color: #303643; }
+    .card-action.secondary { background: #fff; color: var(--ink); border-color: #cfd6df; }
+    .card-action.secondary:hover { background: #f8fafc; border-color: #aab4c2; }
+    .card-action:focus-visible, .nav-link:focus-visible, .copy-button:focus-visible { outline: 3px solid rgba(47, 111, 218, .25); outline-offset: 2px; }
+
+    .all-releases {
+      min-height: 52px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      color: #475467;
+      font-size: 14px;
+      font-weight: 650;
+    }
+
+    .all-releases:hover { color: var(--ink); }
+
+    .product-preview {
+      margin: 54px 0 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr);
+      gap: 28px;
+      align-items: center;
+    }
+
+    .preview-image {
+      width: 100%;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      object-position: top;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--soft);
+      box-shadow: 0 24px 70px rgba(26, 36, 50, .13);
+    }
+
+    .preview-copy h2 { margin: 0; font-size: 30px; line-height: 1.25; font-weight: 810; }
+    .preview-copy p { margin: 14px 0 0; color: var(--muted); font-size: 15px; line-height: 1.7; }
+    .privacy-list { margin: 22px 0 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+    .privacy-list li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; color: #475467; font-size: 14px; line-height: 1.5; }
+    .check { color: var(--success); font-weight: 850; }
+
+    .help-grid {
+      margin: 68px 0 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 18px;
+    }
+
+    .help-panel {
+      padding: 26px;
+      border-top: 1px solid var(--line);
+      background: #fff;
+    }
+    .help-panel h2 { margin: 0; display: flex; align-items: center; gap: 10px; font-size: 20px; font-weight: 790; }
+    .help-panel p { margin: 14px 0 0; color: var(--muted); font-size: 14px; line-height: 1.65; }
+    .steps { margin: 18px 0 0; padding-left: 22px; color: #475467; font-size: 14px; line-height: 1.75; }
+    .steps li + li { margin-top: 7px; }
+
+    .command-box {
+      margin-top: 18px;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid #dbe2ea;
+      border-radius: 7px;
+      background: #f8fafc;
+    }
+    .command-box code { min-width: 0; overflow-x: auto; color: #253044; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: nowrap; }
+    .copy-button {
+      min-width: 40px;
+      min-height: 36px;
+      border: 1px solid #cfd6df;
+      border-radius: 6px;
+      background: #fff;
+      color: #475467;
+      cursor: pointer;
+      font-size: 15px;
+    }
+
+    .requirements {
+      margin: 18px 0 0;
+      padding: 0;
+      list-style: none;
+      display: grid;
+      gap: 10px;
+      color: #475467;
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .requirements strong { color: var(--ink); }
+    .warning-note {
+      margin-top: 18px;
+      padding: 12px 14px;
+      border: 1px solid #f0d7a8;
+      border-radius: 7px;
+      background: var(--warning-soft);
+      color: var(--warning);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    footer {
+      width: min(1120px, calc(100% - 40px));
+      min-height: 100px;
+      margin: 64px auto 0;
+      padding: 28px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .footer-links { display: flex; gap: 18px; }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      z-index: 30;
+      min-height: 42px;
+      padding: 10px 14px;
+      display: flex;
+      align-items: center;
+      border-radius: 7px;
+      background: var(--ink);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 680;
+      opacity: 0;
+      pointer-events: none;
+      transform: translate(-50%, 10px);
+      transition: opacity .18s ease, transform .18s ease;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+    @media (max-width: 940px) {
+      .download-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .product-preview { grid-template-columns: minmax(0, 1fr); }
+      .preview-copy { max-width: 700px; }
+    }
+
+    @media (max-width: 680px) {
+      .site-header { height: 58px; }
+      .nav { width: min(100% - 28px, 1120px); }
+      .nav-link span { display: none; }
+      .nav-link { min-width: 42px; padding: 0 10px; }
+      .nav-link.primary span { display: inline; }
+      main { width: min(100% - 28px, 1120px); }
+      .hero { min-height: 270px; padding: 56px 0 38px; }
+      h1 { font-size: 38px; }
+      .hero-copy { font-size: 15px; }
+      .download-grid { grid-template-columns: minmax(0, 1fr); }
+      .download-card { min-height: 250px; }
+      .product-preview { margin-top: 44px; gap: 22px; }
+      .preview-copy h2 { font-size: 26px; }
+      .help-grid { margin-top: 50px; grid-template-columns: minmax(0, 1fr); }
+      .help-panel { padding: 22px 4px; }
+      footer { width: min(100% - 28px, 1120px); align-items: flex-start; flex-direction: column; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      .toast { transition: none; }
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <nav class="nav" aria-label="主导航">
+      <a class="brand" href="./" aria-label="cat-agentic 下载页">
+        <span class="brand-mark" aria-hidden="true">C</span>
+        <span>cat-<em>agentic</em></span>
+      </a>
+      <div class="nav-links">
+        <a class="nav-link" href="#install"><span>安装帮助</span><b aria-hidden="true">?</b></a>
+        <a class="nav-link" href="https://github.com/354685856-sn/cat-agentic" target="_blank" rel="noreferrer"><span>GitHub</span><b aria-hidden="true">↗</b></a>
+        <a class="nav-link primary" href="#downloads"><b aria-hidden="true">↓</b><span>下载</span></a>
+      </div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="page-title">
+      <div class="eyebrow"><span class="eyebrow-dot" aria-hidden="true"></span>本地 AI 编码助手</div>
+      <h1 id="page-title">下载 cat-agentic</h1>
+      <p class="hero-copy">优先在你的电脑上运行。项目文件、会话记录和 API 密钥由你掌控，桌面端与命令行可按工作方式自由选择。</p>
+      <div class="release-status loading" id="releaseStatus" role="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>正在读取 GitHub Releases...</span>
+      </div>
+    </section>
+
+    <section id="downloads" aria-label="下载选项">
+      <div class="download-grid">
+        <article class="download-card" data-platform="mac">
+          <span class="recommended-label">推荐</span>
+          <div class="platform-icon" aria-hidden="true">⌘</div>
+          <h2>macOS 桌面预览版</h2>
+          <div class="platform-subtitle">适用于 macOS 12 及以上版本，首次启动需要联网准备本地环境。</div>
+          <div class="artifact-meta" id="macMeta">.dmg · v0.5.0 · 1.2 MB</div>
+          <a class="card-action" id="macDownload" href="https://github.com/354685856-sn/cat-agentic/releases/download/v0.5.0/X-Agentic-Workflow-0.5.0-macos-preview.dmg">
+            <span aria-hidden="true">↓</span><span>下载开发预览版</span>
+          </a>
+        </article>
+
+        <article class="download-card" data-platform="windows">
+          <span class="recommended-label">推荐</span>
+          <div class="platform-icon" aria-hidden="true">▣</div>
+          <h2>Windows</h2>
+          <div class="platform-subtitle">Windows 桌面安装包正在准备；当前可使用 Python CLI/TUI。</div>
+          <div class="artifact-meta">Python 3.10+ · pipx</div>
+          <button class="card-action secondary" type="button" data-copy="pipx install x-agentic-workflow" data-scroll="#cliInstall">
+            <span aria-hidden="true">⌘</span><span>复制安装命令</span>
+          </button>
+        </article>
+
+        <article class="download-card" data-platform="linux">
+          <span class="recommended-label">推荐</span>
+          <div class="platform-icon" aria-hidden="true">›_</div>
+          <h2>Linux</h2>
+          <div class="platform-subtitle">支持主流 Linux 发行版，通过隔离的 pipx 环境安装。</div>
+          <div class="artifact-meta">Python 3.10+ · pipx</div>
+          <button class="card-action secondary" type="button" data-copy="pipx install x-agentic-workflow" data-scroll="#cliInstall">
+            <span aria-hidden="true">⌘</span><span>复制安装命令</span>
+          </button>
+        </article>
+
+        <article class="download-card" data-platform="source">
+          <span class="recommended-label">源码</span>
+          <div class="platform-icon" aria-hidden="true">&lt;/&gt;</div>
+          <h2>源码与发布记录</h2>
+          <div class="platform-subtitle">查看最新版本、更新内容、校验信息和历史安装包。</div>
+          <div class="artifact-meta" id="latestMeta">GitHub Releases</div>
+          <a class="card-action secondary" href="https://github.com/354685856-sn/cat-agentic/releases" target="_blank" rel="noreferrer">
+            <span aria-hidden="true">↗</span><span>查看所有版本</span>
+          </a>
+        </article>
+      </div>
+      <a class="all-releases" href="https://github.com/354685856-sn/cat-agentic/releases" target="_blank" rel="noreferrer">查看完整发布记录 <span aria-hidden="true">↗</span></a>
+    </section>
+
+    <section class="product-preview" aria-labelledby="preview-title">
+      <img class="preview-image" src="../assets/cat-agentic-workspace.png" alt="cat-agentic 桌面工作区，包含会话、项目、工具状态和文件变更面板">
+      <div class="preview-copy">
+        <h2 id="preview-title">下载后就是工作区</h2>
+        <p>启动后直接进入本地桌面界面，不需要把项目上传到远端控制台。模型服务商由客户自己配置。</p>
+        <ul class="privacy-list">
+          <li><span class="check" aria-hidden="true">✓</span><span>项目文件和会话记录保存在本机。</span></li>
+          <li><span class="check" aria-hidden="true">✓</span><span>API 密钥保留在环境变量中，不写入项目配置。</span></li>
+          <li><span class="check" aria-hidden="true">✓</span><span>终端命令默认需要人工确认。</span></li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="help-grid" id="install" aria-label="安装帮助">
+      <article class="help-panel">
+        <h2><span aria-hidden="true">⌘</span> macOS 首次启动</h2>
+        <p>当前 DMG 是客户测试用开发预览版，尚未完成 Apple 签名与公证。</p>
+        <ol class="steps">
+          <li>打开 DMG，把 Cat Agentic 拖入“应用程序”。</li>
+          <li>第一次启动时右键应用图标，选择“打开”。</li>
+          <li>等待本地环境准备完成，浏览器会自动打开桌面工作区。</li>
+          <li>进入“设置 → 服务商”，填写模型与 API 密钥环境变量名。</li>
+        </ol>
+        <div class="warning-note">如果 macOS 拦截启动，请在“系统设置 → 隐私与安全性”中确认打开。不要关闭系统安全功能。</div>
+      </article>
+
+      <article class="help-panel" id="cliInstall">
+        <h2><span aria-hidden="true">›_</span> Windows / Linux / 高级用户</h2>
+        <p>当前已发布包名仍是 <code>x-agentic-workflow</code>；安装后可以使用兼容命令 <code>xaw</code>。</p>
+        <div class="command-box">
+          <code>pipx install x-agentic-workflow</code>
+          <button class="copy-button" type="button" title="复制安装命令" aria-label="复制 pipx 安装命令" data-copy="pipx install x-agentic-workflow">⌘</button>
+        </div>
+        <div class="command-box">
+          <code>xaw desktop</code>
+          <button class="copy-button" type="button" title="复制启动命令" aria-label="复制桌面启动命令" data-copy="xaw desktop">⌘</button>
+        </div>
+        <ul class="requirements">
+          <li><strong>系统：</strong>macOS 12+、Windows 10+ 或主流 Linux。</li>
+          <li><strong>运行时：</strong>Python 3.10+，建议使用 pipx。</li>
+          <li><strong>首次启动：</strong>需要网络安装本地依赖。</li>
+          <li><strong>模型：</strong>使用客户自己的 Anthropic 或 OpenAI 兼容 API。</li>
+        </ul>
+      </article>
+    </section>
+  </main>
+
+  <footer>
+    <span>cat-agentic · Clean-room local coding assistant</span>
+    <div class="footer-links">
+      <a href="https://github.com/354685856-sn/cat-agentic" target="_blank" rel="noreferrer">GitHub</a>
+      <a href="https://github.com/354685856-sn/cat-agentic/issues" target="_blank" rel="noreferrer">问题反馈</a>
+    </div>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite">已复制</div>
+
+  <script>
+    const repo = '354685856-sn/cat-agentic';
+    const releaseStatus = document.getElementById('releaseStatus');
+    const macDownload = document.getElementById('macDownload');
+    const macMeta = document.getElementById('macMeta');
+    const latestMeta = document.getElementById('latestMeta');
+    const fallbackDmg = {
+      name: 'X-Agentic-Workflow-0.5.0-macos-preview.dmg',
+      browser_download_url: 'https://github.com/354685856-sn/cat-agentic/releases/download/v0.5.0/X-Agentic-Workflow-0.5.0-macos-preview.dmg',
+      size: 1277075,
+      releaseTag: 'v0.5.0'
+    };
+
+    function formatBytes(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) return '';
+      if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+      return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+    }
+
+    function findDmg(releases) {
+      for (const release of releases) {
+        const asset = (release.assets || []).find(item => String(item.name || '').toLowerCase().endsWith('.dmg'));
+        if (asset) return {...asset, releaseTag: release.tag_name};
+      }
+      return fallbackDmg;
+    }
+
+    function renderRelease(latest, dmg) {
+      latestMeta.textContent = latest ? `${latest.tag_name} · ${new Date(latest.published_at).toLocaleDateString('zh-CN')}` : 'GitHub Releases';
+      macDownload.href = dmg.browser_download_url;
+      const isLegacy = latest && dmg.releaseTag !== latest.tag_name;
+      macDownload.querySelector('span:last-child').textContent = isLegacy ? '下载历史开发预览版' : '下载开发预览版';
+      macMeta.textContent = `.dmg · ${dmg.releaseTag} · ${formatBytes(dmg.size)}`;
+      releaseStatus.classList.remove('loading');
+      releaseStatus.querySelector('span:last-child').textContent = isLegacy
+        ? `最新代码 ${latest.tag_name}；桌面安装包暂提供 ${dmg.releaseTag} 开发预览版`
+        : `已连接 GitHub Releases · ${dmg.releaseTag}`;
+    }
+
+    async function loadReleases() {
+      try {
+        const response = await fetch(`https://api.github.com/repos/${repo}/releases?per_page=20`, {
+          headers: {'Accept': 'application/vnd.github+json'}
+        });
+        if (!response.ok) throw new Error(`GitHub API ${response.status}`);
+        const releases = (await response.json()).filter(item => !item.draft);
+        renderRelease(releases[0] || null, findDmg(releases));
+      } catch (error) {
+        renderRelease(null, fallbackDmg);
+        releaseStatus.querySelector('span:last-child').textContent = '已启用可下载的离线版本信息';
+      }
+    }
+
+    function detectedPlatform() {
+      const value = `${navigator.userAgent} ${navigator.platform}`.toLowerCase();
+      if (value.includes('mac')) return 'mac';
+      if (value.includes('win')) return 'windows';
+      if (value.includes('linux') || value.includes('x11')) return 'linux';
+      return 'source';
+    }
+
+    function recommendPlatform() {
+      const platform = detectedPlatform();
+      const card = document.querySelector(`[data-platform="${platform}"]`);
+      if (card) card.classList.add('recommended');
+    }
+
+    let toastTimer;
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      toast.textContent = message;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 1800);
+    }
+
+    async function copyText(value) {
+      try {
+        await navigator.clipboard.writeText(value);
+        showToast('安装命令已复制');
+      } catch (error) {
+        const input = document.createElement('textarea');
+        input.value = value;
+        input.setAttribute('readonly', '');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
+        showToast('安装命令已复制');
+      }
+    }
+
+    document.querySelectorAll('[data-copy]').forEach(button => {
+      button.addEventListener('click', () => {
+        copyText(button.dataset.copy || '');
+        const target = button.dataset.scroll ? document.querySelector(button.dataset.scroll) : null;
+        if (target) target.scrollIntoView({behavior: 'smooth', block: 'start'});
+      });
+    });
+
+    recommendPlatform();
+    loadReleases();
+  </script>
+</body>
+</html>

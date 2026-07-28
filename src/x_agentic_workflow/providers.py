@@ -11,6 +11,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import Any, cast
 
+import httpx
 from anthropic import Anthropic
 from openai import OpenAI
 
@@ -36,7 +37,14 @@ def build_provider(config: RuntimeConfig) -> ModelProvider:
 class AnthropicProvider(ModelProvider):
     def __init__(self, config: RuntimeConfig) -> None:
         self.config = config
-        self.client = Anthropic(api_key=config.api_key)
+        kwargs: dict[str, Any] = {
+            "api_key": config.api_key,
+            "timeout": config.ai_request_timeout_seconds,
+        }
+        http_client = _http_client_for_network_mode(config)
+        if http_client is not None:
+            kwargs["http_client"] = http_client
+        self.client = Anthropic(**kwargs)
 
     def complete(self, messages: list[Message], tools: list[ToolSpec]) -> ModelResponse:
         system = "\n\n".join(m.content for m in messages if m.role == "system")
@@ -71,9 +79,15 @@ class AnthropicProvider(ModelProvider):
 class OpenAICompatibleProvider(ModelProvider):
     def __init__(self, config: RuntimeConfig) -> None:
         self.config = config
-        kwargs: dict[str, Any] = {"api_key": config.api_key}
+        kwargs: dict[str, Any] = {
+            "api_key": config.api_key,
+            "timeout": config.ai_request_timeout_seconds,
+        }
         if config.provider.base_url:
             kwargs["base_url"] = config.provider.base_url
+        http_client = _http_client_for_network_mode(config)
+        if http_client is not None:
+            kwargs["http_client"] = http_client
         self.client = OpenAI(**kwargs)
 
     def complete(self, messages: list[Message], tools: list[ToolSpec]) -> ModelResponse:
@@ -113,6 +127,15 @@ def _openai_tool(tool: ToolSpec) -> dict[str, Any]:
             "parameters": tool.input_schema,
         },
     }
+
+
+def _http_client_for_network_mode(config: RuntimeConfig) -> httpx.Client | None:
+    timeout = httpx.Timeout(config.ai_request_timeout_seconds)
+    if config.desktop_network_mode == "direct":
+        return httpx.Client(timeout=timeout, trust_env=False)
+    if config.desktop_network_mode == "manual" and config.desktop_manual_proxy:
+        return httpx.Client(timeout=timeout, proxy=config.desktop_manual_proxy, trust_env=False)
+    return None
 
 
 class FakeProvider(ModelProvider):
