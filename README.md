@@ -1,6 +1,55 @@
 # cat-agentic
 
-Clean-room Python terminal agentic coding assistant.
+Cat Codex is the primary desktop workbench for this repository, backed by the
+official Codex App Server protocol. The existing Python `cat-agentic` runtime
+and its browser desktop remain available as compatibility/legacy surfaces while
+the new workbench becomes the main product UI.
+
+## Cat Codex workbench (primary app)
+
+`apps/cat-codex` is the first-stage React/TypeScript/Vite desktop-workbench
+shell wrapped by a Tauri 2 cross-platform desktop shell. Its interaction model
+intentionally follows the familiar Codex desktop workbench structure: projects
+and sessions on the left, conversation and Agent
+events in the center, Files / Diff / Output / Plugins on the right, and a
+composer with model and permission state at the bottom. The visual system is
+Cat Codex's own dark slate and acid-lime identity; it does not copy Codex
+assets or reproduce the UI pixel-for-pixel.
+
+The App Server boundary is isolated in `apps/cat-codex/src/lib/codex`:
+
+- `types.ts` models the documented JSON-RPC messages and
+  `initialize → initialized → thread/start → turn/start` lifecycle.
+- `transport.ts` provides a replaceable WebSocket transport plus an explicit
+  native stdio/Unix placeholder for a future Tauri shell.
+- `client.ts` only reports ready after a real transport and initialization
+  handshake; a missing endpoint never becomes a fake success.
+
+Provider and plugin boundaries are also explicit. Provider adapters reserve
+OpenAI/Codex, DeepSeek, Claude, Gemini, local models, and OpenAI-compatible
+endpoints. The plugin registry is intentionally empty in this first stage;
+future signed manifests may extend providers, tools, MCP, skills, panels, or
+workflows. The UI labels all of these as not installed/not connected until
+there is a real implementation.
+
+Run the primary workbench locally:
+
+```bash
+cd apps/cat-codex
+npm install
+npm run dev
+```
+
+See [`apps/cat-codex/README.md`](apps/cat-codex/README.md) for the integration
+boundary, Tauri/macOS/Windows build notes, and build command. The current local
+validation covers the frontend build and macOS `.app`/`.dmg` bundle; a Windows
+artifact still requires a Windows runner with WebView2 and Tauri prerequisites.
+
+## Legacy runtime and UI
+
+The Python terminal agent runtime in `src/x_agentic_workflow` is preserved for
+compatibility. `cat-agentic desktop` and `apps/macos/Cat Agentic.app` are legacy
+surfaces during this migration; they are not the primary Cat Codex interface.
 
 This repo contains two layers:
 

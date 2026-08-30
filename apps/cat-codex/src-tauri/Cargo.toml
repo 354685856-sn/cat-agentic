@@ -1,0 +1,21 @@
+[package]
+name = "cat-codex"
+version = "0.1.0"
+description = "Cat Codex cross-platform desktop workbench"
+authors = ["Cat Codex"]
+edition = "2021"
+
+[lib]
+name = "cat_codex_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
