@@ -6,7 +6,7 @@ import { extensionLabels, installedPlugins, type PluginExtension } from './lib/p
 
 type EventKind = 'thought' | 'tool' | 'file' | 'notice'
 type AgentEvent = { time: string; kind: EventKind; title: string; detail: string; tone?: 'active' | 'muted' }
-type AppView = 'workspace' | 'settings'
+type AppView = 'home' | 'workspace' | 'settings'
 type SettingsSection = 'general' | 'appearance' | 'models' | 'voice' | 'shortcuts' | 'permissions' | 'usage' | 'account' | 'computer' | 'history' | 'snapshots' | 'plugins' | 'browser'
 
 const initialEvents: AgentEvent[] = [
@@ -151,7 +151,8 @@ export function App() {
   const [activeTab, setActiveTab] = useState<'files' | 'diff' | 'output' | 'plugins'>('files')
   const [notice, setNotice] = useState('')
   const [model, setModel] = useState('gpt-5.6-terra')
-  const [activeView, setActiveView] = useState<AppView>('workspace')
+  const [activeView, setActiveView] = useState<AppView>('home')
+  const [settingsReturnView, setSettingsReturnView] = useState<AppView>('home')
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general')
   const [clientState] = useState<'disconnected' | 'connecting' | 'ready' | 'error'>('disconnected')
   const client = useMemo(() => new CodexAppServerClient(new UnavailableTransport()), [])
@@ -169,24 +170,39 @@ export function App() {
   }
 
   function openSettings(section: SettingsSection = 'general') {
+    if (activeView !== 'settings') setSettingsReturnView(activeView)
     setSettingsSection(section)
     setActiveView('settings')
   }
 
+  function closeSettings() {
+    setActiveView(settingsReturnView)
+  }
+
   const activeSettings = settingsMeta[settingsSection]
   const settingsGroups = [...new Set(settingsSections.map((section) => section.group))]
+  const settingsBackLabel = settingsReturnView === 'home' ? 'Back to home' : 'Back to workspace'
 
   return (
     <div className="app-shell">
-      <header className="topbar">
+      {activeView !== 'home' && <header className="topbar">
         <div className="brand-lockup"><div className="brand-mark"><span>◒</span></div><div><strong>cat codex</strong><small>agent workbench</small></div></div>
         <div className="topbar-context"><span className="context-dot" /> {activeView === 'settings' ? 'Settings' : <>New project <span className="slash">/</span> local</>}</div>
         <div className="topbar-actions"><button className="icon-button" aria-label="Toggle panels"><Icon name="panel" /></button><button className={`icon-button ${activeView === 'settings' ? 'active' : ''}`} aria-label="Settings" onClick={() => openSettings()}><Icon name="settings" /></button><div className="avatar">NG</div></div>
-      </header>
+      </header>}
 
-      {activeView === 'workspace' ? <div className="workspace-grid">
+      {activeView === 'home' ? <section className="chat-home-shell" aria-label="Cat Codex home">
+        <aside className="chat-sidebar">
+          <button className="chat-brand" onClick={() => setActiveView('home')} aria-label="Cat Codex home"><span className="chat-brand-mark">◒</span><span>cat codex</span></button>
+          <div className="chat-sidebar-actions"><button className="chat-new-button" onClick={() => setActiveView('workspace')}><Icon name="plus" /> New chat</button><button className="chat-rail-button" aria-label="Search chats"><Icon name="search" /></button></div>
+          <nav className="chat-primary-nav" aria-label="Primary"><button className="chat-nav-item selected"><Icon name="chat" /> Home</button><button className="chat-nav-item" onClick={() => setActiveView('workspace')}><Icon name="folder" /> Projects <span>3</span></button><button className="chat-nav-item" onClick={() => openSettings('plugins')}><Icon name="spark" /> Plugins <span>0</span></button></nav>
+          <div className="chat-history"><p className="chat-nav-label">Recent</p>{sessions.map((session) => <button key={session.name} className="chat-history-item" onClick={() => setActiveView('workspace')}><Icon name="chat" /><span>{session.name}</span></button>)}</div>
+          <div className="chat-sidebar-footer"><button className="chat-account-button" onClick={() => openSettings('account')}><span className="avatar">NG</span><span className="chat-account-copy"><strong>NG</strong><small>Account & settings</small></span><Icon name="settings" /></button><span className="chat-local-status"><span className="status-dot" /> Local-first · not connected</span></div>
+        </aside>
+        <main className="chat-home-main"><header className="chat-home-header"><button className="chat-model-button" onClick={() => openSettings('models')}><span className="context-dot" /> Cat Codex <span className="chat-model-caret">⌄</span></button><div className="chat-home-actions"><button className="chat-rail-button" aria-label="Toggle panels"><Icon name="panel" /></button><button className="chat-rail-button" aria-label="Settings" onClick={() => openSettings()}><Icon name="settings" /></button></div></header><div className="chat-home-center"><div className="chat-greeting"><div className="welcome-icon"><span>◒</span></div><h1>我们今天要做什么？</h1><p>Ask Cat Codex to inspect, plan, or change a workspace.</p></div><div className="chat-home-composer"><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) submit() }} placeholder="处理任何事务" rows={3} aria-label="Ask Cat Codex" /><div className="chat-home-composer-footer"><div className="chat-home-tools"><button className="composer-tool"><Icon name="plus" /> Add context</button><button className="composer-tool" onClick={() => setActiveView('workspace')}><Icon name="folder" /> Files</button></div><div className="chat-home-send"><label className="chat-home-model"><span>Model</span><select value={model} onChange={(event) => setModel(event.target.value)} aria-label="Home model">{currentProvider.models.map((item) => <option key={item}>{item}</option>)}</select><Icon name="chevron" /></label><button className="send-button" onClick={submit} aria-label="Send message"><Icon name="send" /></button></div></div></div><button className="chat-project-picker" onClick={() => setActiveView('workspace')}><Icon name="folder" /><span>Choose a project</span><Icon name="chevron" /></button>{notice && <div className="chat-home-notice" role="status">{notice}<button onClick={() => setNotice('')}>Dismiss</button></div>}</div><p className="chat-home-footnote">Cat Codex can use your connected providers, tools, and plugins when they are configured.</p></main>
+      </section> : activeView === 'workspace' ? <div className="workspace-grid">
         <aside className="sidebar">
-          <div className="sidebar-actions"><button className="new-button"><Icon name="plus" /> New session</button><button className="icon-button subtle" aria-label="Search sessions"><Icon name="search" /></button></div>
+          <div className="sidebar-actions"><button className="new-button" onClick={() => setActiveView('home')}><Icon name="plus" /> New session</button><button className="icon-button subtle" aria-label="Search sessions"><Icon name="search" /></button></div>
           <div className="sidebar-heading"><span>Projects</span><button className="tiny-button" aria-label="Expand projects"><Icon name="chevron" /></button></div>
           <div className="project-row active"><span className="project-glyph">N</span><span className="project-copy"><strong>New project</strong><small>~/Documents/Codex</small></span><span className="project-count">3</span></div>
           <div className="sidebar-heading session-heading"><span>Sessions</span><span className="session-count">3</span></div>
@@ -210,12 +226,12 @@ export function App() {
         </aside>
       </div> : <section className="settings-shell" aria-label="Settings">
         <aside className="settings-nav">
-          <div className="settings-nav-header"><button className="settings-back" onClick={() => setActiveView('workspace')} aria-label="Back to workspace"><Icon name="chevron" /></button><div><strong>Settings</strong><small>Cat Codex</small></div></div>
+          <div className="settings-nav-header"><button className="settings-back" onClick={closeSettings} aria-label={settingsBackLabel}><Icon name="chevron" /></button><div><strong>Settings</strong><small>Cat Codex</small></div></div>
           <label className="settings-search"><Icon name="search" /><input aria-label="Search settings" placeholder="Search settings" /></label>
           <nav className="settings-section-list">{settingsGroups.map((group) => <div key={group}><p className="settings-group-label">{group}</p>{settingsSections.filter((section) => section.group === group).map((section) => <button key={section.id} className={`settings-nav-item ${settingsSection === section.id ? 'selected' : ''}`} onClick={() => setSettingsSection(section.id)}><Icon name={section.id === 'plugins' ? 'spark' : section.id === 'permissions' ? 'lock' : section.id === 'browser' || section.id === 'computer' ? 'panel' : 'settings'} />{section.label}</button>)}</div>)}</nav>
           <div className="settings-nav-footer"><span className="status-dot" /> Native shell features are off</div>
         </aside>
-        <main className="settings-content"><header className="settings-header"><div><p className="eyebrow">{activeSettings.eyebrow}</p><h1>{activeSettings.title}</h1><p>{activeSettings.description}</p></div><button className="back-workspace" onClick={() => setActiveView('workspace')}>Back to workspace <Icon name="chevron" /></button></header><div className="settings-scroll"><section className="settings-card"><div className="settings-card-label">CURRENT CONFIGURATION</div>{activeSettings.rows.map((row) => <div className="setting-row" key={row.label}><div><strong>{row.label}</strong><p>{row.detail}</p></div><span className={`setting-value ${row.value.includes('Not') || row.value === 'Off' || row.value === 'Unavailable' ? 'muted' : ''}`}>{row.value}</span></div>)}</section><section className="settings-footnote"><Icon name="lock" /><div><strong>Settings are local-first</strong><p>Changes that require the native shell, a provider, or an external account will stay unavailable until that boundary is connected.</p></div></section></div></main>
+        <main className="settings-content"><header className="settings-header"><div><p className="eyebrow">{activeSettings.eyebrow}</p><h1>{activeSettings.title}</h1><p>{activeSettings.description}</p></div><button className="back-workspace" onClick={closeSettings}>{settingsBackLabel} <Icon name="chevron" /></button></header><div className="settings-scroll"><section className="settings-card"><div className="settings-card-label">CURRENT CONFIGURATION</div>{activeSettings.rows.map((row) => <div className="setting-row" key={row.label}><div><strong>{row.label}</strong><p>{row.detail}</p></div><span className={`setting-value ${row.value.includes('Not') || row.value === 'Off' || row.value === 'Unavailable' ? 'muted' : ''}`}>{row.value}</span></div>)}</section><section className="settings-footnote"><Icon name="lock" /><div><strong>Settings are local-first</strong><p>Changes that require the native shell, a provider, or an external account will stay unavailable until that boundary is connected.</p></div></section></div></main>
       </section>}
     </div>
   )
