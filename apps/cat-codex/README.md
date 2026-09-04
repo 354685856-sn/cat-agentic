@@ -24,9 +24,9 @@ npm run tauri:build
 - `src/lib/platform.ts` keeps platform, App Server endpoint, sandbox/permission
   mode, and network policy abstract. The native shell owns secret-bearing
   headers and local process launch; the browser UI never stores raw API keys.
-- `src-tauri/src/transport.rs` is the native transport seam. It currently
-  reports `NotConfigured`; stdio/Unix/WebSocket implementations can be added
-  behind the same seam without platform-specific UI changes.
+- `src-tauri/src/transport.rs` owns the native stdio transport. Tauri starts
+  the official `codex app-server --stdio` process, writes JSONL requests to its
+  stdin, and emits stdout messages to the React client as Tauri events.
 - This repository has validated the TypeScript build plus macOS `.app`/`.dmg`
   bundling. A Windows package still requires a Windows CI/runner with the
   WebView2 and Tauri prerequisites; it is not claimed as a produced Windows
@@ -40,12 +40,12 @@ npm run build
 
 ## Integration boundaries
 
-- `src/lib/codex/transport.ts`：可替换 transport。当前提供浏览器 WebSocket transport，以及明确抛出“native transport unavailable”的 placeholder；未来 Tauri shell 可以注入 stdio / Unix socket 实现。
+- `src/lib/codex/transport.ts`：可替换 transport。Tauri 桌面壳使用原生 stdio transport；浏览器预览继续使用明确失败的 placeholder，避免把网页环境误当成原生连接。
 - `src/lib/codex/client.ts`：Codex App Server client，按官方生命周期发送 `initialize`、`initialized`、`thread/start`、`turn/start`，响应与通知分开处理。
 - `src/lib/codex/types.ts`：官方协议请求、响应、初始化、thread/start、turn/start 与通知的 TypeScript 边界。没有把 UI demo 数据伪装成服务器结果。
 - `src/lib/providers.ts`：Provider 类型和模型边界，预留 OpenAI/Codex、DeepSeek、Claude、Gemini、本地模型与 OpenAI-compatible。
 - `src/lib/plugins.ts`：插件 manifest 与 extension point 边界。插件可扩展 Provider、工具、MCP、技能、面板或工作流；第一阶段注册表为空。
 
-当前 UI 默认显示 `Not connected`。没有 app-server endpoint 或 native shell 时，发送请求只显示“未发送”提示，不产生虚假成功事件。
+浏览器预览没有 native shell 时仍显示 `Not connected`；Tauri 桌面壳会启动本机 `codex app-server --stdio`，按官方生命周期完成握手、thread/start 和 turn/start，并通过事件流接收服务端消息。
 
 官方协议依据：[Codex App Server 文档](https://developers.openai.com/codex/app-server)。

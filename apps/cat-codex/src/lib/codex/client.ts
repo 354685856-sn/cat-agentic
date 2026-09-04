@@ -1,5 +1,5 @@
 import type { CodexTransport, TransportState } from './transport'
-import type { CodexServerMessage, InitializeParams, JsonRpcResponse, ThreadStartParams, ThreadStartResult, TurnStartParams } from './types'
+import type { CodexServerMessage, InitializeParams, JsonRpcResponse, JsonRpcServerRequest, ThreadStartParams, ThreadStartResult, TurnStartParams } from './types'
 
 export type ClientState = 'disconnected' | 'connecting' | 'ready' | 'error'
 
@@ -11,6 +11,7 @@ export class CodexAppServerClient {
   private stateValue: ClientState = 'disconnected'
   private readonly stateListeners = new Set<(state: ClientState) => void>()
   private readonly eventListeners = new Set<(message: CodexServerMessage) => void>()
+  private readonly requestListeners = new Set<(message: JsonRpcServerRequest) => void>()
 
   constructor(private readonly transport: CodexTransport) {
     this.unsubscribeMessage = transport.onMessage((message) => this.handleMessage(message))
@@ -30,6 +31,8 @@ export class CodexAppServerClient {
   startTurn(params: TurnStartParams) { return this.request('turn/start', params) }
 
   subscribe(listener: (message: CodexServerMessage) => void) { this.eventListeners.add(listener); return () => this.eventListeners.delete(listener) }
+  onServerRequest(listener: (message: JsonRpcServerRequest) => void) { this.requestListeners.add(listener); return () => this.requestListeners.delete(listener) }
+  respond(id: number, result: unknown) { this.transport.send({ id, result }) }
   dispose() { this.unsubscribeMessage?.(); this.unsubscribeTransport?.(); this.transport.close() }
 
   private request<TResult = unknown>(method: string, params: unknown): Promise<TResult> {
@@ -44,6 +47,10 @@ export class CodexAppServerClient {
   private notify(method: string, params: unknown) { this.transport.send({ method, params }) }
 
   private handleMessage(message: CodexServerMessage) {
+    if ('method' in message && 'id' in message) {
+      this.requestListeners.forEach((listener) => listener(message))
+      return
+    }
     if ('id' in message) {
       const response = message as JsonRpcResponse
       const pending = this.pending.get(response.id)

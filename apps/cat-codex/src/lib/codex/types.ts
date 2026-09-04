@@ -9,6 +9,12 @@ export interface JsonRpcRequest<TParams = unknown> {
   params: TParams
 }
 
+export interface JsonRpcServerRequest<TParams = unknown> {
+  method: string
+  id: number
+  params: TParams
+}
+
 export interface JsonRpcNotification<TParams = unknown> {
   method: string
   params: TParams
@@ -59,4 +65,23 @@ export interface ThreadStartResult { thread: ThreadRef }
 export interface TurnStartedParams { turn: { id: string } }
 export interface AgentMessageDeltaParams { delta?: string; threadId?: string; turnId?: string }
 
-export type CodexServerMessage = JsonRpcResponse | JsonRpcNotification
+export type CodexServerMessage = JsonRpcResponse | JsonRpcNotification | JsonRpcServerRequest
+
+export type ApprovalDecision = 'accept' | 'acceptForSession' | 'decline' | 'cancel'
+
+export interface FileChangeApprovalParams {
+  itemId: string
+  threadId: string
+  turnId: string
+  reason?: string
+  grantRoot?: string
+}
+
+export interface CommandApprovalParams {
+  itemId: string
+  threadId: string
+  turnId: string
+  command?: string
+  cwd?: string
+  reason?: string
+}

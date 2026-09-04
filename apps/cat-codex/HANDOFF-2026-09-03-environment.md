@@ -1,0 +1,101 @@
+# Cat Codex UI 交接：环境页继续对齐（2026-09-03）
+
+## 项目
+
+- 真实工作树：`/Users/mac/Documents/Codex/cat-agentic-migration/apps/cat-codex`
+- 范围：只处理 Cat Codex 工作台设置 UI；不要修改 Kissing Light、阿拉山口、已安装应用或外部系统。
+- 当前用户要求：继续按 ChatGPT 设置截图逐页对齐；整套设置页完成前不做最终安装包打包。
+
+## 当前状态
+
+- 已完成/复核：设置侧栏分组与项目、语言切换、主页面、Providers、常规/导入/个人资料/外观/语音/配置/个性化/智能伙伴/键盘快捷键/使用情况和计费/电脑操控/计算机历史记录/应用快照/插件/浏览器/连接/Git 的主要 UI 结构与中文文案；Git 与连接页已做 Chrome 桌面/窄窗口复核。
+- 当前继续项：环境页参考图为 `/Users/mac/Desktop/截屏2026-09-03 12.36.33.png`。右侧应显示标题“环境”、说明、选择项目/添加项目和 6 个项目卡片（Claude-cc-haha_全部文件、Codex、Obsidian Vault、New project/354685856-sn、ai-info-radar-system、Deniro-Tech-AI-Automation），每行文档图标与加号按钮。
+- `EnvironmentPage` 已有上述六项、中文/英文文案、加项目提示和本地选择状态；下一窗口需先检查实际渲染，再只做必要的间距、字体、卡片和图标收敛，不要臆造真实工作区选择器。
+- 现有代码改动：`src/App.tsx`、`src/styles.css`、`src/lib/providers.ts`（保留既有 providers 修改，不覆盖）。
+
+## 验证与边界
+
+- 最近已知：`npm run build` 与 `git diff --check` 通过；未打包、未替换已安装应用。
+- 本窗口输入上下文已达到交接压力；运行时未暴露精确 token 计数，不能虚构数字。新窗口从本文件、项目记忆和全局 active-context 继续。
+- 新窗口开始后：运行 `git status --short`，检查 EnvironmentPage/CSS，启动或复用 `http://127.0.0.1:4174/`，使用原生 Chrome 做桌面与窄窗口视觉/交互复核；完成后再更新本文件和 Obsidian。
+
+## 本窗口完成（2026-09-03）
+
+- 核对 `settingsMeta.environment` 与设置页右侧渲染；将描述收敛为本地环境为项目设置工作树的准确文案，中文去除多余空格和句号。
+- 原生 Chrome 实际复核桌面与 `390×844`：标题、说明、选择项目、添加项目、六个项目卡片及 `New project / 354685856-sn` 均可见；`scrollWidth === clientWidth`，无横向溢出。
+- 验证添加项目提示、项目加入/移除本地预览交互；恢复深色 Cat Codex 主题与未选中状态。未连接真实文件系统选择器，不打包、不替换已安装应用。
+- 验证：`npm run build` PASS；`git diff --check` PASS。保留 `src/lib/providers.ts` 既有修改。
+
+## 本窗口追加：Worktrees 参考图对齐（2026-09-03）
+
+- 按 `/var/folders/k1/1tdl09m16ss5_t1586x_jpm00000gn/T/TemporaryItems/NSIRD_screencaptureui_hhrb0o/截屏2026-09-03 13.58.23.png` 调整 Worktrees 右侧页：中文设置内容、英文 `Worktrees` 标题、四行根目录设置、`尚无工作树` 标题/刷新按钮和空状态卡片。
+- 移除示例工作树卡片，避免伪造实际工作树；保留根目录输入、开关、保留数量及刷新按钮的本地预览反馈。
+- 原生 Chrome 桌面与 `390×844` 窄视口通过，无横向溢出；输入、两个开关、刷新反馈可操作，控制台无 error/warning。交互状态已恢复默认。
+- `npm run build` 与 `git diff --check` PASS；未打包、未替换已安装应用，保留 `src/lib/providers.ts` 既有修改。
+
+## 本窗口追加：首页 UI 按参考图收敛（2026-09-03）
+
+- 参考图：`/var/folders/k1/1tdl09m16ss5_t1586x_jpm00000gn/T/TemporaryItems/NSIRD_screencaptureui_k762RZ/截屏2026-09-03 14.14.10.png`。保留 Cat Codex 黑绿色主题，按首页结构收敛品牌选择器、侧栏导航、顶部动作、输入区、项目入口和左下账户入口的尺寸、边框、hover/focus 状态。
+- 左下账户入口现可展开向上弹出的本地账户菜单，包含剩余用量、隐藏宠物、邀请同事、设置、退出登录；设置/用量进入现有设置页，其余只显示本地能力边界提示，不伪造账户服务。
+- 原生 Chrome 桌面复核菜单展开；`390×844` 窄视口无横向溢出，控制台 error/warning 为 0。交互状态已恢复默认，未打包或替换已安装应用。
+- 验证：`npm run build` PASS；`git diff --check` PASS；保留 `src/lib/providers.ts` 既有修改。
+
+## 本窗口追加：服务商集成页与编辑面板（2026-09-03）
+
+- 按用户提供的五张服务商参考图整理：服务商入口已归入设置侧栏“集成”分组；现有服务商列表继续保留并覆盖 OpenAI/Codex、Anthropic、Google、DeepSeek、xAI、Mistral、Zhipu、Moonshot、MiniMax、Qwen、Qianfan、OpenRouter、Groq、Together、Fireworks、Ollama、LM Studio、Azure、Bedrock、GitHub Models、本地及兼容接口。
+- 服务商编辑面板已补充名称、备注、接口地址、API 格式、认证变量、Tool Search、Beta 头、API 密钥掩码、图片生成、模型映射、获取模型、测试连接和设置 JSON 等本地预览结构；原始密钥不写入网页端。
+- 保持项目原有 sans/mono 字体体系，不引入截图中的衬线字体；保留黑绿色 Cat Codex 主题。
+- 原生 Chrome 桌面与 `390×844` 窄视口通过，无横向溢出，控制台 error/warning 为 0；`npm run build` 与 `git diff --check` PASS。未打包。
+
+## 本窗口追加：官方模型 ID 校准与自定义供应商（2026-09-03）
+
+- 根据各供应商官方模型/API 文档校准内置模型 ID：OpenAI `gpt-5.6-*`、Anthropic `claude-sonnet-4-6`/`claude-opus-4-6`/`claude-haiku-4-5-20251001`、Google `gemini-2.5-*`、DeepSeek `deepseek-v4-*`、xAI `grok-4.6`、Mistral `mistral-*-latest`、MiniMax `MiniMax-M2.*`、Kimi `kimi-k2.6`、Groq 完整 Llama 4 Scout ID 等。
+- OpenRouter 使用官方文档示例中可确认的 `openai/gpt-4o` 和 `google/gemini-2.5-pro`；新增“自定义服务商”，模型字段明确为用户自行填写的模型 ID。
+- 验证：`npm run build` 与 `git diff --check` PASS；未打包，保留 `src/lib/providers.ts` 的本地配置边界。
+
+## 继续推进：设置页大屏留白修复（2026-09-03）
+
+- 原因：`.settings-scroll` 的 `width: min(740px, 100%)` 将整个设置内容列限制得过窄，大窗口右侧因此出现大块空白。
+- 修复：设置滚动内容区改为占满可用宽度，设置页子区块同步取消整体窄列限制；文字自身仍遵循页面已有行宽约束。
+- `npm run build`、`git diff --check` PASS；本地预览已重新打开，未打包。
+
+## 继续推进：模型目录缓存迁移（2026-09-03）
+
+- 增加服务商目录迁移：未配置的旧缓存条目会自动采用当前官方模型目录；已保存的自定义配置和模型保留，避免覆盖用户自己的模型 ID。
+- “自定义服务商”纳入服务商选择目录，模型字段继续要求用户填写真实上游模型 ID。
+- 本轮 `npm run build` 与 `git diff --check` PASS。当前运行时未提供原生 Chrome 控制工具，本轮未宣称新增视觉复核；未打包。
+
+## 继续推进：窄屏首页底部溢出修复（2026-09-03）
+
+- 用户反馈截图实际为 `319×690` 窄视口；该宽度按响应式规则隐藏左侧栏，因此与桌面首页参考图不是同一版式。
+- 已让窄屏输入区工具换行并收缩模型选择器，避免底部横向滚动条；桌面首页侧栏结构保持不变。
+- 蓝色 `1` 是浏览器评论标记，不属于页面 UI。`npm run build`、`git diff --check` PASS；未打包。
+
+## 继续推进：首页壳层逐项对齐（2026-09-03）
+
+- 按首页参考图补齐左上折叠/后退/前进工具组、品牌行搜索/通知按钮，以及中间顶栏文件夹标题和右侧调整/最小化/分栏动作。
+- 临时文字符号替换为统一 SVG 图标；不改设置页、服务商目录和既有 `src/lib/providers.ts` 修改。
+- `npm run build` 与 `git diff --check` PASS；本轮未提供原生 Chrome 控制工具，因此未宣称新增视觉验收；未打包。
+
+## 继续推进：语言入口迁移至集成（2026-09-03）
+
+- 已移除设置侧栏左下角的“简体中文”快捷按钮。
+- 新增“集成 → 语言”页面，按参考图只保留 English 与简体中文，并支持当前语言高亮和切换。
+- `npm run build` 与 `git diff --check` PASS；未打包。
+
+## 继续推进：官方 Codex App Server stdio 桥接（2026-09-03）
+
+- 已确认本机官方 `codex` 可执行文件存在，`codex app-server --stdio` 可启动。
+- Tauri Rust 端负责启动/停止 app-server、写入 JSONL 请求并通过 Tauri 事件转发 stdout；前端新增 `TauriTransport`，按官方生命周期连接并发送 `initialize`、`thread/start`、`turn/start`。
+- 浏览器预览仍使用安全的未连接 transport；未接触 API 密钥。`cargo check`、`npm run build`、`git diff --check` PASS；未打包。
+
+## 继续推进：首页左右顶栏间距对齐（2026-09-03）
+
+- 左上按参考图校准为面板、后退、前进三枚图标，并调整为等距布局。
+- 右上按参考图校准为调整、最小化、分栏三枚图标，统一图标尺寸和右侧边距。
+- `npm run build` 与 `git diff --check` PASS；未打包。
+
+## 继续推进：账户区状态文字清理（2026-09-03）
+
+- 已移除首页账户区头像下方的“本地优先 · 未连接”文字，保留账户名称、账户设置和菜单交互。
+- `npm run build` 与 `git diff --check` PASS；未打包。
