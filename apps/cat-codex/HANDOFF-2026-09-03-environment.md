@@ -89,6 +89,15 @@
 - Tauri Rust 端负责启动/停止 app-server、写入 JSONL 请求并通过 Tauri 事件转发 stdout；前端新增 `TauriTransport`，按官方生命周期连接并发送 `initialize`、`thread/start`、`turn/start`。
 - 浏览器预览仍使用安全的未连接 transport；未接触 API 密钥。`cargo check`、`npm run build`、`git diff --check` PASS；未打包。
 
+## 2026-09-04 官方事件链路与 GitHub 发布候选
+
+- `src/lib/codex/client.ts` 已区分服务端主动 JSON-RPC request 与普通 response，并提供 `onServerRequest`/`respond`；文件更改和命令执行审批请求可返回 `accept`/`decline`。
+- `src/App.tsx` 已接收 App Server `turn/diff/updated`、文件 item、命令输出和回合完成事件，驱动主页事件流及右侧 Files / Diff / Output 面板；浏览器仍保持未连接降级。
+- `src-tauri/src/transport.rs` 优先从 Tauri `resource_dir` 启动随包官方 `codex` 二进制，开发环境找不到资源时回退 `PATH`；`tauri.conf.json` 已声明 `resources/*`。
+- 新增 `scripts/prepare-codex-sidecar.sh` 和仓库级 `.github/workflows/cat-codex-desktop.yml`，用于编译官方 `openai/codex`、构建 macOS arm64/x64 与 Windows x64 Tauri 安装包，并形成 Draft Release。
+- `README.md` 已补充下载/发布说明，明确无需 Node.js/Python/全局 codex 命令，未签名包可能需要系统确认。
+- 已将提交 `601fee0` 推送至 `origin/main`；验证 `npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`git diff --check`、`bash -n scripts/prepare-codex-sidecar.sh` 均通过。GitHub Actions、Windows runner、正式 Release 仍待执行；按要求未打包本地安装物。
+
 ## 继续推进：首页左右顶栏间距对齐（2026-09-03）
 
 - 左上按参考图校准为面板、后退、前进三枚图标，并调整为等距布局。

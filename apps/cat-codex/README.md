@@ -27,10 +27,12 @@ npm run tauri:build
 - `src-tauri/src/transport.rs` owns the native stdio transport. Tauri starts
   the official `codex app-server --stdio` process, writes JSONL requests to its
   stdin, and emits stdout messages to the React client as Tauri events.
-- This repository has validated the TypeScript build plus macOS `.app`/`.dmg`
-  bundling. A Windows package still requires a Windows CI/runner with the
-  WebView2 and Tauri prerequisites; it is not claimed as a produced Windows
-  artifact yet.
+- Release builds prepare the official OpenAI Codex binary as a bundled native
+  resource, so an installed app does not require Node.js, Python, or a global
+  `codex` command. Local development may still fall back to `codex` on `PATH`.
+- GitHub Actions builds signed-or-unsigned macOS arm64/x64 and Windows x64
+  installers from version tags. Until signing secrets are configured, users
+  may need to approve the unsigned download in the operating system.
 
 生产构建：
 
@@ -49,3 +51,10 @@ npm run build
 浏览器预览没有 native shell 时仍显示 `Not connected`；Tauri 桌面壳会启动本机 `codex app-server --stdio`，按官方生命周期完成握手、thread/start 和 turn/start，并通过事件流接收服务端消息。
 
 官方协议依据：[Codex App Server 文档](https://developers.openai.com/codex/app-server)。
+
+## Download and release
+
+Push a version tag such as `v0.1.0` to start the desktop release workflow. The
+workflow builds the frontend, compiles the official Codex sidecar from
+`openai/codex`, bundles it into the Tauri application, and uploads macOS and
+Windows artifacts to a draft GitHub Release for review before publication.

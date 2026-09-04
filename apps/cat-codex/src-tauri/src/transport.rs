@@ -2,7 +2,7 @@ use serde::Serialize;
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 
 /// Platform-neutral transport choices. Native stdio/Unix implementations can
 /// be added without changing the React client contract.
@@ -31,7 +31,11 @@ pub fn start(app: AppHandle, state: State<'_, AppServerState>) -> Result<Transpo
     let mut process = state.process.lock().map_err(|_| "App Server 状态锁不可用".to_owned())?;
     if process.is_some() { return Ok(TransportStatus::Running); }
 
-    let mut child = Command::new("codex")
+    let codex = app.path().resource_dir().ok()
+        .map(|directory| directory.join(if cfg!(windows) { "codex.exe" } else { "codex" }))
+        .filter(|path| path.is_file());
+    let mut command = codex.map(Command::new).unwrap_or_else(|| Command::new("codex"));
+    let mut child = command
         .args(["app-server", "--stdio"])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
