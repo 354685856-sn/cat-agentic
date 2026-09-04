@@ -111,6 +111,11 @@
 - 新增 Tauri `pick_workspace` 原生目录选择，App Server 启动、`thread/start`、`turn/start` 现在使用用户选择的工作区路径；路径写入本地存储。
 - `npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`git diff --check` PASS。仍未完成完整开箱即用验收，下一步继续会话恢复、认证引导、真实文件树/Diff 和跨平台安装包启动测试。
 
+## 2026-09-04 GitHub CI 修复
+
+- GitHub checks 首次失败日志确认是 Ubuntu runner 缺少 GTK/GDK/GIO 系统库；已在 workflow 中安装 Tauri/rfd 所需依赖。
+- 修复提交 `fe41d56` 已推送，新的 Actions run `33848730519`、`33848730512` 已启动，最终状态待确认。
+
 ## 继续推进：首页左右顶栏间距对齐（2026-09-03）
 
 - 左上按参考图校准为面板、后退、前进三枚图标，并调整为等距布局。
