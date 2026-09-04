@@ -116,6 +116,12 @@
 - GitHub checks 首次失败日志确认是 Ubuntu runner 缺少 GTK/GDK/GIO 系统库；已在 workflow 中安装 Tauri/rfd 所需依赖。
 - 修复提交 `fe41d56` 已推送，新的 Actions run `33848730519`、`33848730512` 已启动，最终状态待确认。
 
+## 2026-09-04 GitHub Actions 全量复核
+
+- 已读取 GitHub 旧失败日志并修复两类问题：桌面 CI 缺少 Ubuntu GTK/GDK/GIO 依赖；Python CI 缺少 `httpx` 项目依赖声明。
+- 最新提交 `18ffe94` 已验证三条流水线全部成功：Cat Codex desktop `33852607795`、Docker Build `33852607674`、Python CI `33852607550`。
+- 页面仍显示旧提交失败记录，但这些是历史结果；当前 `main` 最新提交无 workflow 报错。
+
 ## 继续推进：首页左右顶栏间距对齐（2026-09-03）
 
 - 左上按参考图校准为面板、后退、前进三枚图标，并调整为等距布局。
