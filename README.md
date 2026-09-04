@@ -1,4 +1,4 @@
-# cat-agentic
+# Cat Codex
 
 Cat Codex is the primary desktop workbench for this repository, backed by the
 official Codex App Server protocol. The existing Python `cat-agentic` runtime
