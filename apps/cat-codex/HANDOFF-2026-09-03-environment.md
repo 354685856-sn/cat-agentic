@@ -96,7 +96,7 @@
 - `src-tauri/src/transport.rs` 优先从 Tauri `resource_dir` 启动随包官方 `codex` 二进制，开发环境找不到资源时回退 `PATH`；`tauri.conf.json` 已声明 `resources/*`。
 - 新增 `scripts/prepare-codex-sidecar.sh` 和仓库级 `.github/workflows/cat-codex-desktop.yml`，用于编译官方 `openai/codex`、构建 macOS arm64/x64 与 Windows x64 Tauri 安装包，并形成 Draft Release。
 - `README.md` 已补充下载/发布说明，明确无需 Node.js/Python/全局 codex 命令，未签名包可能需要系统确认。
-- 已将提交 `601fee0` 推送至 `origin/main`；验证 `npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`git diff --check`、`bash -n scripts/prepare-codex-sidecar.sh` 均通过。GitHub Actions、Windows runner、正式 Release 仍待执行；按要求未打包本地安装物。
+- 已将提交 `601fee0`、`753d6d7` 推送至 `origin/main`；验证 `npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`git diff --check`、`bash -n scripts/prepare-codex-sidecar.sh` 和 workflow YAML 解析均通过。GitHub Actions 已触发 run `33844019768`，但查询结果时本机遇到 TLS handshake timeout，尚未取得 runner/Windows 结论；正式 Release 仍未执行，按要求未打包本地安装物。
 
 ## 继续推进：首页左右顶栏间距对齐（2026-09-03）
 
