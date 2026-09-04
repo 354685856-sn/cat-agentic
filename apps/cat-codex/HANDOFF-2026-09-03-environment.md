@@ -98,6 +98,19 @@
 - `README.md` 已补充下载/发布说明，明确无需 Node.js/Python/全局 codex 命令，未签名包可能需要系统确认。
 - 已将提交 `601fee0`、`753d6d7` 推送至 `origin/main`；验证 `npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`git diff --check`、`bash -n scripts/prepare-codex-sidecar.sh` 和 workflow YAML 解析均通过。GitHub Actions 已触发 run `33844019768`，但查询结果时本机遇到 TLS handshake timeout，尚未取得 runner/Windows 结论；正式 Release 仍未执行，按要求未打包本地安装物。
 
+## 2026-09-04 仓库改名与功能真实性审计
+
+- GitHub 仓库已重命名为 `354685856-sn/cat-codex`，本地 `origin` 已同步；根 README 标题已改为 Cat Codex。
+- App Server 原生启停、官方生命周期、事件流和审批响应已实现；服务商保存、语言/主题及 UI 导航为本地逻辑。
+- 文件夹选择、完整文件树/差异解析、账户/OAuth/API 密钥安全存储、cc-switch 导入、浏览器/Chrome/Excel 控制、账单/用量、插件安装、宠物文件夹和快捷键注册尚未真实接通，相关按钮仍是预览提示。
+- 源码可以下载并开发运行，但普通客户下载后还不能宣称完整可用；正式安装包必须先通过 GitHub runner、sidecar 启动、跨平台安装和认证链路验收。
+
+## 2026-09-04 官方协议工作区接入
+
+- 按官方 App Server 当前文档增加 `item/permissions/requestApproval` 类型与处理；保留旧式审批兼容分支。
+- 新增 Tauri `pick_workspace` 原生目录选择，App Server 启动、`thread/start`、`turn/start` 现在使用用户选择的工作区路径；路径写入本地存储。
+- `npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`git diff --check` PASS。仍未完成完整开箱即用验收，下一步继续会话恢复、认证引导、真实文件树/Diff 和跨平台安装包启动测试。
+
 ## 继续推进：首页左右顶栏间距对齐（2026-09-03）
 
 - 左上按参考图校准为面板、后退、前进三枚图标，并调整为等距布局。

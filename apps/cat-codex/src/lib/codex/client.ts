@@ -20,8 +20,8 @@ export class CodexAppServerClient {
 
   get state() { return this.stateValue }
 
-  async initialize(clientInfo: InitializeParams['clientInfo']) {
-    await this.transport.connect()
+  async initialize(clientInfo: InitializeParams['clientInfo'], options?: { cwd?: string }) {
+    await this.transport.connect(options)
     await this.request('initialize', { clientInfo })
     this.notify('initialized', {})
     this.setState('ready')

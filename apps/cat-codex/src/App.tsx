@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { CodexAppServerClient } from './lib/codex/client'
 import { TauriTransport, UnavailableTransport } from './lib/codex/transport'
 import type { JsonRpcServerRequest } from './lib/codex/types'
+import { invoke } from '@tauri-apps/api/core'
 import { providers, type ModelProvider, type ProviderId } from './lib/providers'
 import { extensionLabels, installedPlugins, type PluginExtension } from './lib/plugins'
 
@@ -689,6 +690,7 @@ export function App() {
   const [settingsSearch, setSettingsSearch] = useState('')
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const [homeInspectorOpen, setHomeInspectorOpen] = useState(false)
+  const [workspacePath, setWorkspacePath] = useState(() => readStored('cat-codex-workspace', ''))
   const [inspectorData, setInspectorData] = useState<InspectorData>({ files: [], diff: '', output: '' })
   const [approvalRequest, setApprovalRequest] = useState<JsonRpcServerRequest | null>(null)
   const [language, setLanguage] = useState<'zh' | 'en'>(() => readStored<'zh' | 'en'>('cat-codex-language', 'zh'))
@@ -731,7 +733,7 @@ export function App() {
       setEvents((current) => [event, ...current].slice(0, 30))
     })
     const unsubscribeRequests = client.onServerRequest((request) => {
-      if (request.method === 'item/fileChange/requestApproval' || request.method === 'item/commandExecution/requestApproval') { setApprovalRequest(request); setHomeInspectorOpen(true) }
+      if (request.method === 'item/permissions/requestApproval' || request.method === 'item/fileChange/requestApproval' || request.method === 'item/commandExecution/requestApproval') { setApprovalRequest(request); setHomeInspectorOpen(true) }
     })
     return () => { unsubscribeState(); unsubscribeEvents(); unsubscribeRequests(); client.dispose() }
   }, [client])
@@ -746,11 +748,24 @@ export function App() {
       return
     }
     try {
-      if (!initialized.current) { await client.initialize({ name: 'cat-codex', title: 'Cat Codex', version: '0.1.0' }); initialized.current = true }
-      if (!threadId.current) { const result = await client.startThread({ model, cwd: undefined }); threadId.current = result.thread.id }
+      if (!workspacePath) { await chooseWorkspace(); return }
+      if (!initialized.current) { await client.initialize({ name: 'cat-codex', title: 'Cat Codex', version: '0.1.0' }, { cwd: workspacePath }); initialized.current = true }
+      if (!threadId.current) { const result = await client.startThread({ model, cwd: workspacePath }); threadId.current = result.thread.id }
       await client.startTurn({ threadId: threadId.current, input: [{ type: 'text', text: trimmed }], model })
       setInput('')
     } catch (error) { setNotice(`发送失败：${error instanceof Error ? error.message : String(error)}`) }
+  }
+
+  async function chooseWorkspace() {
+    if (!nativeShell) { setActiveView('workspace'); setNotice(textFor('文件夹选择需要桌面应用。', 'Choose a folder from the desktop app.')); return }
+    try {
+      const selected = await invoke<string | null>('pick_workspace')
+      if (!selected) return
+      setWorkspacePath(selected)
+      writeStored('cat-codex-workspace', selected)
+      setNotice(`${textFor('已选择工作区：', 'Workspace selected: ')}${selected}`)
+      setActiveView('workspace')
+    } catch (error) { setNotice(`${textFor('选择工作区失败：', 'Unable to choose workspace: ')}${String(error)}`) }
   }
 
   function openSettings(section: SettingsSection = 'general') {
@@ -860,7 +875,7 @@ export function App() {
         </aside>
         <main className="chat-home-main"><header className="chat-home-header"><button className="chat-model-button" onClick={() => openSettings('models')}><Icon name="folder" /><span>Cat Codex</span><span className="chat-model-caret">⌄</span></button><div className="chat-home-actions"><button className="chat-rail-button" aria-label={textFor('调整显示', 'Adjust display')} onClick={() => setNotice(textFor('显示选项已打开。', 'Display options opened.'))}><Icon name="sliders" /></button><button className="chat-rail-button" aria-label={textFor('收起面板', 'Close inspector')} onClick={() => setHomeInspectorOpen(false)}><Icon name="minimize" /></button><button className="chat-rail-button" aria-label={textFor('展开右侧面板', 'Open inspector')} onClick={() => setHomeInspectorOpen(true)}><Icon name="split" /></button></div></header><div className="chat-home-center"><div className="chat-greeting"><div className="welcome-icon"><span>◒</span></div><h1>{textFor('我们今天要做什么？', 'What should we work on?')}</h1><p>{textFor('让 Cat Codex 检查、规划或修改工作区。', 'Ask Cat Codex to inspect, plan, or change a workspace.')}</p></div><div className="chat-home-composer"><textarea value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) submit() }} placeholder={textFor('处理任何事务', 'Work on anything')} rows={3} aria-label={textFor('向 Cat Codex 提问', 'Ask Cat Codex')} /><div className="chat-home-composer-footer"><div className="chat-home-tools"><button className="composer-tool"><Icon name="plus" /> {textFor('添加上下文', 'Add context')}</button><button className="composer-tool" onClick={() => setActiveView('workspace')}><Icon name="folder" /> {textFor('文件', 'Files')}</button></div><div className="chat-home-send"><label className="chat-home-model"><span>{textFor('模型', 'Model')}</span><select value={model} onChange={(event) => setModel(event.target.value)} aria-label={textFor('主页模型', 'Home model')}>{currentProvider.models.map((item) => <option key={item}>{item}</option>)}</select><Icon name="chevron" /></label><button className="send-button" onClick={submit} aria-label={textFor('发送消息', 'Send message')}><Icon name="send" /></button></div></div></div><button className="chat-project-picker" onClick={() => setActiveView('workspace')}><Icon name="folder" /><span>{textFor('选择项目', 'Choose a project')}</span><Icon name="chevron" /></button>{notice && <div className="chat-home-notice" role="status">{notice}<button onClick={() => setNotice('')}>{textFor('关闭', 'Dismiss')}</button></div>}</div><p className="chat-home-footnote">{textFor('配置完成后，Cat Codex 可以使用已连接的服务商、工具和插件。', 'Cat Codex can use your connected providers, tools, and plugins when they are configured.')}</p></main>
         {homeInspectorOpen && <HomeInspector activeTab={activeTab} setActiveTab={setActiveTab} language={language} data={inspectorData} onClose={() => setHomeInspectorOpen(false)} />}
-        {approvalRequest && <div className="approval-banner" role="alert"><strong>{approvalRequest.method === 'item/fileChange/requestApproval' ? textFor('请求批准文件更改', 'File change approval requested') : textFor('请求批准执行命令', 'Command approval requested')}</strong><span>{String((approvalRequest.params as Record<string, unknown>)?.reason ?? (approvalRequest.params as Record<string, unknown>)?.command ?? '')}</span><button onClick={() => { client.respond(approvalRequest.id, { decision: 'decline' }); setApprovalRequest(null) }}>{textFor('拒绝', 'Decline')}</button><button className="primary-action" onClick={() => { client.respond(approvalRequest.id, { decision: 'accept' }); setApprovalRequest(null) }}>{textFor('批准', 'Approve')}</button></div>}
+        {approvalRequest && <div className="approval-banner" role="alert"><strong>{approvalRequest.method === 'item/permissions/requestApproval' ? textFor('请求批准权限', 'Permission approval requested') : approvalRequest.method === 'item/fileChange/requestApproval' ? textFor('请求批准文件更改', 'File change approval requested') : textFor('请求批准执行命令', 'Command approval requested')}</strong><span>{String((approvalRequest.params as Record<string, unknown>)?.reason ?? (approvalRequest.params as Record<string, unknown>)?.command ?? '')}</span><button onClick={() => { client.respond(approvalRequest.id, { decision: 'decline' }); setApprovalRequest(null) }}>{textFor('拒绝', 'Decline')}</button><button className="primary-action" onClick={() => { client.respond(approvalRequest.id, { decision: 'accept' }); setApprovalRequest(null) }}>{textFor('批准', 'Approve')}</button></div>}
       </section> : activeView === 'workspace' ? <div className="workspace-grid">
         <aside className="sidebar">
           <div className="sidebar-actions"><button className="new-button" onClick={() => setActiveView('home')}><Icon name="plus" /> {textFor('新会话', 'New session')}</button><button className="icon-button subtle" aria-label={textFor('搜索会话', 'Search sessions')}><Icon name="search" /></button></div>

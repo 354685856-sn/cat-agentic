@@ -6,7 +6,7 @@ export type TransportState = 'idle' | 'connecting' | 'open' | 'closed' | 'error'
 
 export interface CodexTransport {
   readonly state: TransportState
-  connect(): Promise<void>
+  connect(options?: { cwd?: string }): Promise<void>
   send(message: JsonRpcRequest | JsonRpcNotification | JsonRpcResponse): void
   close(): void
   onMessage(listener: (message: CodexServerMessage) => void): () => void
@@ -77,7 +77,7 @@ export class TauriTransport implements CodexTransport {
 
   get state() { return this.currentState }
 
-  async connect(): Promise<void> {
+  async connect(options?: { cwd?: string }): Promise<void> {
     if (this.currentState === 'open') return
     this.setState('connecting')
     this.unlistenMessage = await listen<string>('app-server-message', (event) => {
@@ -85,7 +85,7 @@ export class TauriTransport implements CodexTransport {
       catch { this.setState('error') }
     })
     this.unlistenStopped = await listen('app-server-stopped', () => this.setState('closed'))
-    try { await invoke('app_server_start'); this.setState('open') }
+    try { await invoke('app_server_start', { cwd: options?.cwd ?? null }); this.setState('open') }
     catch (error) { this.setState('error'); await this.cleanup(); throw new Error(String(error)) }
   }
 

@@ -85,3 +85,11 @@ export interface CommandApprovalParams {
   cwd?: string
   reason?: string
 }
+
+export interface PermissionsApprovalParams {
+  threadId: string
+  turnId: string
+  itemId: string
+  permissions: unknown
+  reason?: string
+}

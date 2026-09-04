@@ -27,7 +27,7 @@ impl Default for AppServerState {
     fn default() -> Self { Self { process: Mutex::new(None) } }
 }
 
-pub fn start(app: AppHandle, state: State<'_, AppServerState>) -> Result<TransportStatus, String> {
+pub fn start(app: AppHandle, state: State<'_, AppServerState>, cwd: Option<String>) -> Result<TransportStatus, String> {
     let mut process = state.process.lock().map_err(|_| "App Server 状态锁不可用".to_owned())?;
     if process.is_some() { return Ok(TransportStatus::Running); }
 
@@ -35,6 +35,9 @@ pub fn start(app: AppHandle, state: State<'_, AppServerState>) -> Result<Transpo
         .map(|directory| directory.join(if cfg!(windows) { "codex.exe" } else { "codex" }))
         .filter(|path| path.is_file());
     let mut command = codex.map(Command::new).unwrap_or_else(|| Command::new("codex"));
+    if let Some(directory) = cwd.filter(|value| !value.trim().is_empty()) {
+        command.current_dir(directory);
+    }
     let mut child = command
         .args(["app-server", "--stdio"])
         .stdin(Stdio::piped())
