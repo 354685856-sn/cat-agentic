@@ -122,6 +122,13 @@
 - 最新提交 `18ffe94` 已验证三条流水线全部成功：Cat Codex desktop `33852607795`、Docker Build `33852607674`、Python CI `33852607550`。
 - 页面仍显示旧提交失败记录，但这些是历史结果；当前 `main` 最新提交无 workflow 报错。
 
+## 2026-09-04 会话恢复与流式回复
+
+- `src/lib/codex/client.ts` 新增官方 `thread/resume` 调用。
+- `src/App.tsx` 按工作区保存 thread ID，启动后优先恢复已有会话；实时接收 `item/agentMessage/delta` 并显示流式助手文本，回合开始/完成状态同步到 UI。
+- “打开文件夹”已接入 Tauri `pick_workspace`，选择结果写入本地设置并作为 app-server `cwd`。
+- 本轮 `npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`git diff --check` 均通过；下一步继续真实文件树/Diff、认证引导和安装包启动验收。
+
 ## 继续推进：首页左右顶栏间距对齐（2026-09-03）
 
 - 左上按参考图校准为面板、后退、前进三枚图标，并调整为等距布局。

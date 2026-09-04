@@ -1,5 +1,5 @@
 import type { CodexTransport, TransportState } from './transport'
-import type { CodexServerMessage, InitializeParams, JsonRpcResponse, JsonRpcServerRequest, ThreadStartParams, ThreadStartResult, TurnStartParams } from './types'
+import type { CodexServerMessage, InitializeParams, JsonRpcResponse, JsonRpcServerRequest, ThreadResumeParams, ThreadStartParams, ThreadStartResult, TurnStartParams } from './types'
 
 export type ClientState = 'disconnected' | 'connecting' | 'ready' | 'error'
 
@@ -28,6 +28,7 @@ export class CodexAppServerClient {
   }
 
   startThread(params: ThreadStartParams = {}) { return this.request<ThreadStartResult>('thread/start', params) }
+  resumeThread(params: ThreadResumeParams) { return this.request<ThreadStartResult>('thread/resume', params) }
   startTurn(params: TurnStartParams) { return this.request('turn/start', params) }
 
   subscribe(listener: (message: CodexServerMessage) => void) { this.eventListeners.add(listener); return () => this.eventListeners.delete(listener) }

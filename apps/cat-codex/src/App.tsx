@@ -693,6 +693,9 @@ export function App() {
   const [workspacePath, setWorkspacePath] = useState(() => readStored('cat-codex-workspace', ''))
   const [inspectorData, setInspectorData] = useState<InspectorData>({ files: [], diff: '', output: '' })
   const [approvalRequest, setApprovalRequest] = useState<JsonRpcServerRequest | null>(null)
+  const [assistantReply, setAssistantReply] = useState('')
+  const [lastUserMessage, setLastUserMessage] = useState('')
+  const [turnActive, setTurnActive] = useState(false)
   const [language, setLanguage] = useState<'zh' | 'en'>(() => readStored<'zh' | 'en'>('cat-codex-language', 'zh'))
   const [customInstructions, setCustomInstructions] = useState('')
   const [memoryEnabled, setMemoryEnabled] = useState(false)
@@ -720,7 +723,9 @@ export function App() {
     const unsubscribeEvents = client.subscribe((message) => {
       if (!('method' in message)) return
       const params = message.params as Record<string, unknown> | undefined
-      if (message.method === 'turn/completed') setNotice('回合已完成。')
+      if (message.method === 'item/agentMessage/delta' && typeof params?.delta === 'string') setAssistantReply((current) => `${current}${params.delta as string}`)
+      if (message.method === 'turn/started') setTurnActive(true)
+      if (message.method === 'turn/completed') { setTurnActive(false); setNotice('回合已完成。') }
       if (message.method === 'turn/diff/updated' && typeof params?.diff === 'string') { setInspectorData((current) => ({ ...current, diff: params.diff as string })); setHomeInspectorOpen(true); setActiveTab('diff') }
       if (message.method === 'item/commandExecution/outputDelta' && typeof params?.delta === 'string') setInspectorData((current) => ({ ...current, output: `${current.output}${params.delta as string}` }))
       if (message.method === 'item/started' || message.method === 'item/completed') {
@@ -750,7 +755,15 @@ export function App() {
     try {
       if (!workspacePath) { await chooseWorkspace(); return }
       if (!initialized.current) { await client.initialize({ name: 'cat-codex', title: 'Cat Codex', version: '0.1.0' }, { cwd: workspacePath }); initialized.current = true }
-      if (!threadId.current) { const result = await client.startThread({ model, cwd: workspacePath }); threadId.current = result.thread.id }
+      setLastUserMessage(trimmed)
+      setAssistantReply('')
+      setTurnActive(true)
+      if (!threadId.current) {
+        const savedThread = readStored<string | null>(`cat-codex-thread:${workspacePath}`, null)
+        const result = savedThread ? await client.resumeThread({ threadId: savedThread, model, cwd: workspacePath }).catch(() => client.startThread({ model, cwd: workspacePath })) : await client.startThread({ model, cwd: workspacePath })
+        threadId.current = result.thread.id
+        writeStored(`cat-codex-thread:${workspacePath}`, threadId.current)
+      }
       await client.startTurn({ threadId: threadId.current, input: [{ type: 'text', text: trimmed }], model })
       setInput('')
     } catch (error) { setNotice(`发送失败：${error instanceof Error ? error.message : String(error)}`) }
@@ -883,14 +896,15 @@ export function App() {
           <div className="project-row active"><span className="project-glyph">N</span><span className="project-copy"><strong>{textFor('新建项目', 'New project')}</strong><small>~/Documents/Codex</small></span><span className="project-count">3</span></div>
           <div className="sidebar-heading session-heading"><span>{textFor('会话', 'Sessions')}</span><span className="session-count">3</span></div>
           <nav className="session-list" aria-label={textFor('会话', 'Sessions')}>{visibleSessions.map((session) => <button key={session.name} className={`session-row ${session.selected ? 'selected' : ''}`}><span className="session-icon"><Icon name="chat" /></span><span className="session-copy"><strong>{session.name}</strong><small>{session.subtitle}</small></span><time>{session.time}</time></button>)}</nav>
-          <div className="sidebar-bottom"><button className="sidebar-link" onClick={() => setActiveTab('plugins')}><Icon name="spark" /> {textFor('插件注册表', 'Plugin registry')} <span className="sidebar-pill">0</span></button><button className="sidebar-link"><Icon name="folder" /> {textFor('打开文件夹', 'Open folder')}</button><button className="sidebar-link" onClick={() => openSettings()}><Icon name="settings" /> {textFor('偏好设置', 'Preferences')} <kbd>⌘ ,</kbd></button></div>
+          <div className="sidebar-bottom"><button className="sidebar-link" onClick={() => setActiveTab('plugins')}><Icon name="spark" /> {textFor('插件注册表', 'Plugin registry')} <span className="sidebar-pill">0</span></button><button className="sidebar-link" onClick={chooseWorkspace}><Icon name="folder" /> {textFor('打开文件夹', 'Open folder')}</button><button className="sidebar-link" onClick={() => openSettings()}><Icon name="settings" /> {textFor('偏好设置', 'Preferences')} <kbd>⌘ ,</kbd></button></div>
         </aside>
 
         <main className="conversation">
           <div className="conversation-header"><div><p className="eyebrow">{textFor('会话 · 001', 'SESSION · 001')}</p><h1>{textFor('Cat Codex 初次检查', 'Cat Codex first pass')}</h1></div><div className="header-tools"><button className="header-action" onClick={() => setNotice(textFor('分享链接将在连接账户后生成。', 'A share link will be available after account connection.'))}>{textFor('分享', 'Share')}</button><button className="header-action" onClick={() => setNotice(textFor('显示选项已打开。', 'Display options opened.'))}>{textFor('调整', 'Adjust')}</button><button className="icon-button subtle" aria-label={textFor('切换面板', 'Toggle panels')}><Icon name="panel" /></button><span className="local-chip"><span className="chip-dot" /> {textFor('本地工作区', 'Local workspace')}</span><button className="icon-button subtle" aria-label={textFor('更多会话操作', 'More session actions')} onClick={() => setNotice(textFor('会话操作菜单：置顶、重命名、复制、归档。', 'Session actions: pin, rename, copy, archive.'))}>•••</button></div></div>
           <div className="conversation-scroll">
             <section className="welcome-block"><div className="welcome-icon"><span>◒</span></div><div><h2>{textFor('准备好后就开始。', 'Ready when you are.')}</h2><p>{textFor('让 Cat Codex 检查、规划或修改这个工作区。每一步操作都会显示在事件流中。', 'Ask Cat Codex to inspect, plan, or change this workspace. Every action will appear in the event stream.')}</p></div></section>
-            <section className="request-card"><div className="request-meta"><span className="request-avatar">NG</span><span>{textFor('你', 'You')}</span><time>{textFor('今天 09:40', 'Today, 09:40')}</time></div><p>先检查仓库规则和现状，搭一个可启动的 Cat Codex 工作台骨架。</p></section>
+            {lastUserMessage && <section className="request-card"><div className="request-meta"><span className="request-avatar">NG</span><span>{textFor('你', 'You')}</span><time>{textFor('刚刚', 'Just now')}</time></div><p>{lastUserMessage}</p></section>}
+            {(assistantReply || turnActive) && <section className="request-card assistant-card"><div className="request-meta"><span className="request-avatar assistant-avatar">◒</span><span>Cat Codex</span><time>{turnActive ? textFor('工作中', 'Working') : textFor('刚刚', 'Just now')}</time></div><p>{assistantReply || textFor('正在等待 App Server 回复…', 'Waiting for the App Server response…')}</p></section>}
             <section className="agent-section"><div className="section-label"><span className="live-line" /> {textFor('智能体事件', 'Agent events')} <span className="event-count">{events.length}</span></div><div className="event-stream">{events.map((event, index) => { const visible = visibleEvent(event); return <div className={`event-row ${event.tone === 'active' ? 'event-active' : ''}`} key={`${event.time}-${index}`}><div className={`event-icon event-${event.kind}`}><Icon name={event.kind === 'thought' ? 'spark' : event.kind === 'tool' ? 'terminal' : event.kind === 'file' ? 'file' : 'lock'} /></div><div className="event-body"><div><strong>{visible.title}</strong>{event.tone === 'active' && <span className="working-badge">{textFor('等待中', 'waiting')}</span>}</div><p>{visible.detail}</p></div><time>{event.time}</time></div> })}</div></section>
             <section className="connection-note"><div className="note-icon"><Icon name="lock" /></div><div><strong>{textFor('App Server 连接已关闭', 'App Server connection is off')}</strong><p>{textFor('Cat Codex 采用本地优先模式。请在原生外壳中设置 App Server 端点以启用对话。', 'Cat Codex is local-first. Set an app-server endpoint in the native shell to enable conversations.')}</p></div><button onClick={() => setNotice(textFor('连接配置将在 Tauri/native transport 接入阶段开放。', 'Connection settings will be available after the Tauri/native transport is integrated.'))}>{textFor('了解方法', 'Learn how')}</button></section>
           </div>

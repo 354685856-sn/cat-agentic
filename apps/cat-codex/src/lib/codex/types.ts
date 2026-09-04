@@ -61,6 +61,7 @@ export interface TurnStartParams {
 
 export interface ThreadRef { id: string }
 export interface ThreadStartResult { thread: ThreadRef }
+export interface ThreadResumeParams { threadId: string; cwd?: string; model?: string }
 
 export interface TurnStartedParams { turn: { id: string } }
 export interface AgentMessageDeltaParams { delta?: string; threadId?: string; turnId?: string }
