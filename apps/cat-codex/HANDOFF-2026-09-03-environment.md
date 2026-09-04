@@ -129,6 +129,12 @@
 - “打开文件夹”已接入 Tauri `pick_workspace`，选择结果写入本地设置并作为 app-server `cwd`。
 - 本轮 `npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`git diff --check` 均通过；下一步继续真实文件树/Diff、认证引导和安装包启动验收。
 
+## 2026-09-04 真实工作区快照
+
+- Tauri 新增 `workspace_snapshot` 与 `open_workspace`；真实读取工作区文件、目录数量、Git 分支，并将用户选定目录交给 App Server。
+- workspace 视图右侧 Files 与项目栏已使用真实快照，不再固定展示示例文件列表；生成目录和 `.git` 被排除。
+- `npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`git diff --check` PASS；下一步继续真实文件内容/Diff 应用、认证引导和安装包验收。
+
 ## 继续推进：首页左右顶栏间距对齐（2026-09-03）
 
 - 左上按参考图校准为面板、后退、前进三枚图标，并调整为等距布局。
