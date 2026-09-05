@@ -145,3 +145,9 @@
 
 - 已移除首页账户区头像下方的“本地优先 · 未连接”文字，保留账户名称、账户设置和菜单交互。
 - `npm run build` 与 `git diff --check` PASS；未打包。
+
+## 2026-09-05 App Server 认证与文件预览链路
+
+- 按 OpenAI App Server 官方协议增加 `account/read` 与 `account/login/start`；主页连接卡片可从桌面端发起 ChatGPT 登录，凭据仍由官方 Codex 运行时管理，不进入网页存储。
+- 新增 Tauri `read_workspace_file`，严格限制在选定工作区内并限制 512 KiB 预览；右侧 Files 点击后展示真实文件内容，真实 `turn/diff/updated` 仍优先显示。
+- 登录不再要求先选择工作区；本地 `npm run build`、`cargo check`、`git diff --check` 均通过。仍需真实 macOS/Windows 安装包启动和首次 OAuth 实机验收。
