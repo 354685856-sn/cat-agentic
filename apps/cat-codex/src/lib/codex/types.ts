@@ -63,6 +63,19 @@ export interface ThreadRef { id: string }
 export interface ThreadStartResult { thread: ThreadRef }
 export interface ThreadResumeParams { threadId: string; cwd?: string; model?: string }
 
+export interface AccountReadResult {
+  account: { type?: string; email?: string; planType?: string } | null
+  requiresOpenaiAuth?: boolean
+}
+
+export interface AccountLoginStartResult {
+  type: 'chatgpt' | 'chatgptDeviceCode' | 'apiKey'
+  loginId?: string
+  authUrl?: string
+  verificationUrl?: string
+  userCode?: string
+}
+
 export interface TurnStartedParams { turn: { id: string } }
 export interface AgentMessageDeltaParams { delta?: string; threadId?: string; turnId?: string }
 

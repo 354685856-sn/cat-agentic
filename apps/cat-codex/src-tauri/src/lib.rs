@@ -22,6 +22,34 @@ struct WorkspaceSnapshot {
     branch: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WorkspaceFileContent {
+    path: String,
+    content: String,
+    truncated: bool,
+}
+
+fn workspace_file_path(workspace: &str, relative: &str) -> Result<(PathBuf, String), String> {
+    let root = PathBuf::from(workspace).canonicalize().map_err(|error| format!("无法定位工作区：{error}"))?;
+    let candidate = root.join(relative);
+    let path = candidate.canonicalize().map_err(|error| format!("无法读取文件：{error}"))?;
+    if !path.starts_with(&root) { return Err("只能读取工作区内的文件".to_owned()); }
+    if !path.is_file() { return Err("目标不是文件".to_owned()); }
+    let display = path.strip_prefix(&root).map_err(|_| "无法计算文件路径".to_owned())?.to_string_lossy().replace('\\', "/");
+    Ok((path, display))
+}
+
+#[tauri::command]
+fn read_workspace_file(workspace: String, relative: String) -> Result<WorkspaceFileContent, String> {
+    let (path, display) = workspace_file_path(&workspace, &relative)?;
+    let bytes = std::fs::read(&path).map_err(|error| format!("无法读取文件：{error}"))?;
+    const MAX_BYTES: usize = 512 * 1024;
+    let truncated = bytes.len() > MAX_BYTES;
+    let content = String::from_utf8_lossy(&bytes[..bytes.len().min(MAX_BYTES)]).into_owned();
+    Ok(WorkspaceFileContent { path: display, content, truncated })
+}
+
 fn collect_workspace(path: &Path, root: &Path, files: &mut Vec<String>, directories: &mut usize) -> Result<(), String> {
     let entries = std::fs::read_dir(path).map_err(|error| format!("无法读取工作区：{error}"))?;
     for entry in entries {
@@ -99,7 +127,7 @@ fn app_server_stop(state: tauri::State<'_, transport::AppServerState>) -> Result
 pub fn run() {
     tauri::Builder::default()
         .manage(transport::AppServerState::default())
-        .invoke_handler(tauri::generate_handler![platform_info, pick_workspace, workspace_snapshot, open_workspace, app_server_transport_status, app_server_start, app_server_send, app_server_stop])
+        .invoke_handler(tauri::generate_handler![platform_info, pick_workspace, workspace_snapshot, read_workspace_file, open_workspace, app_server_transport_status, app_server_start, app_server_send, app_server_stop])
         .run(tauri::generate_context!())
         .expect("error while running Cat Codex");
 }

@@ -1,5 +1,5 @@
 import type { CodexTransport, TransportState } from './transport'
-import type { CodexServerMessage, InitializeParams, JsonRpcResponse, JsonRpcServerRequest, ThreadResumeParams, ThreadStartParams, ThreadStartResult, TurnStartParams } from './types'
+import type { AccountLoginStartResult, AccountReadResult, CodexServerMessage, InitializeParams, JsonRpcResponse, JsonRpcServerRequest, ThreadResumeParams, ThreadStartParams, ThreadStartResult, TurnStartParams } from './types'
 
 export type ClientState = 'disconnected' | 'connecting' | 'ready' | 'error'
 
@@ -30,6 +30,8 @@ export class CodexAppServerClient {
   startThread(params: ThreadStartParams = {}) { return this.request<ThreadStartResult>('thread/start', params) }
   resumeThread(params: ThreadResumeParams) { return this.request<ThreadStartResult>('thread/resume', params) }
   startTurn(params: TurnStartParams) { return this.request('turn/start', params) }
+  readAccount() { return this.request<AccountReadResult>('account/read', { refreshToken: false }) }
+  startAccountLogin(type: 'chatgpt' | 'chatgptDeviceCode' | 'apiKey', apiKey?: string) { return this.request<AccountLoginStartResult>('account/login/start', apiKey ? { type, apiKey } : { type }) }
 
   subscribe(listener: (message: CodexServerMessage) => void) { this.eventListeners.add(listener); return () => this.eventListeners.delete(listener) }
   onServerRequest(listener: (message: JsonRpcServerRequest) => void) { this.requestListeners.add(listener); return () => this.requestListeners.delete(listener) }
