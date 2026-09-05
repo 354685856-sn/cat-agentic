@@ -151,3 +151,9 @@
 - 按 OpenAI App Server 官方协议增加 `account/read` 与 `account/login/start`；主页连接卡片可从桌面端发起 ChatGPT 登录，凭据仍由官方 Codex 运行时管理，不进入网页存储。
 - 新增 Tauri `read_workspace_file`，严格限制在选定工作区内并限制 512 KiB 预览；右侧 Files 点击后展示真实文件内容，真实 `turn/diff/updated` 仍优先显示。
 - 登录不再要求先选择工作区；本地 `npm run build`、`cargo check`、`git diff --check` 均通过。仍需真实 macOS/Windows 安装包启动和首次 OAuth 实机验收。
+
+## 2026-09-05 CI 复核
+
+- 提交 `99d9b43` 已推送到 `https://github.com/354685856-sn/cat-codex`。
+- 该提交的 `CI` run `33951897145`、`Docker Build` run `33951897142`、`Cat Codex desktop` run `33951897148` 均为 success。
+- 远端构建成功不等于已完成客户实机安装验收；仍需在 macOS/Windows 下载产物后验证 sidecar 启动、登录回调和首次工作区运行。
