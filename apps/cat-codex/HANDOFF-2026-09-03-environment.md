@@ -157,3 +157,10 @@
 - 提交 `99d9b43` 已推送到 `https://github.com/354685856-sn/cat-codex`。
 - 该提交的 `CI` run `33951897145`、`Docker Build` run `33951897142`、`Cat Codex desktop` run `33951897148` 均为 success。
 - 远端构建成功不等于已完成客户实机安装验收；仍需在 macOS/Windows 下载产物后验证 sidecar 启动、登录回调和首次工作区运行。
+
+## 2026-09-05 上下文窗口切换交接
+
+- 当前任务需在新窗口继续，避免上下文过重；运行时未提供精确输入 token 数，按上下文压力提前切换。
+- 当前分支 `main` 干净并已同步远端，最新提交 `51a2dcd`；代码提交 `34c9216` 已包含官方账户登录和真实文件预览。
+- 已验证本地 `npm run build`、`cargo check --manifest-path src-tauri/Cargo.toml`、`git diff --check`；提交 `99d9b43` 的 GitHub CI、Docker Build、Cat Codex desktop 全部成功。
+- 新窗口第一步：读取本文件、`active-context.md` 和 Obsidian 项目记录，检查 Git 状态；继续完成 macOS/Windows 安装包下载实测、sidecar 启动、OAuth 回调和剩余真实按钮逻辑。不要最终打包，除非用户明确授权。
